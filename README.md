@@ -340,6 +340,16 @@ Track 1.6 — Decentralized Runtime Integrity Engine for Remote Agents
 
 > One-liner for viva: *"Sig covers all three hashes plus seq/ts/prevHash. Chain proves order, baseline proves good. We name binary vs config vs memory. Limits: Checker can lie without TPM, re-read is demo-only, memory is a whitelist."*
 
+## IntelliJ Troubleshooting
+
+`Error: Could not find or load main class integrity.Main` with no `-classpath` in the launch line means IntelliJ's Make produced nothing. Fix in order:
+
+1. `File -> Project Structure -> Project`: SDK must be JDK 24 (Add SDK -> JDK home `C:\Program Files\Java\jdk-24` if missing). Language level 24.
+2. `Modules -> 1.6 -> Sources`: `java/src` must be blue (Sources). If not, right-click -> Mark as Sources Root.
+3. `Build -> Rebuild Project`. Verify `out/production/1.6/integrity/Main.class` exists (terminal builds use `out/integrity/`, a different folder — both can coexist).
+4. Run config `Run-Engine`: "Use classpath of module: 1.6", Before Launch: Build.
+5. Re-run. Fallback that always works: `scripts/run.ps1` in a terminal (all live GREEN/RED tests ran that way).
+
 ## Open Limits (volunteer before judges ask)
 * Compromised Checker can sign false hashes — TPM/TEE is the stretch goal.
 * Boss file re-read works because demo is one laptop; remote verifier uses signed measurement + baseline + chain only.
