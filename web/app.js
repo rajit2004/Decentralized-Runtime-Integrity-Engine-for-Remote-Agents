@@ -52,7 +52,7 @@ function renderStatus(s) {
   $("detail").textContent = s.detail;
   $("chainBadge").textContent = "chain: " + (s.chainUp ? "UP" : "fallback");
   setHash("hBase", "mBase", s.expected, true);
-  setHash("hObs", "mObs", s.observed, s.observed === s.expected);
+  setDiff("hObs", "mObs", s.expected, s.observed);
   setHash("hChain", "mChain", s.chain, s.chain === s.expected);
   setHash("hPrev", null, s.prevHash, true, true);
   $("latencyNote").textContent =
@@ -70,6 +70,85 @@ function setHash(codeId, markId, full, ok, neutral) {
   }
 }
 
+function setDiff(codeId, markId, base, obs) {
+  const c = $(codeId);
+  c.title = obs || "";
+  c.dataset.copy = obs || "";
+  if (!obs || obs === "-") { c.textContent = "-"; if (markId) $(markId).textContent = ""; return; }
+  if (!base || base === "-" || base.length !== obs.length) {
+    c.textContent = shortH(obs);
+    if (markId) { const m = $(markId); m.textContent = base === obs ? "✓" : "✗"; m.className = base === obs ? "ok" : "bad"; }
+    return;
+  }
+  let html = "", diff = 0;
+  const show = obs.length > 24
+    ? obs.slice(0, 12) + "…" + obs.slice(-6)
+    : obs;
+  // char-level diff on the displayed window: compare full strings, render window
+  const win = obs.length > 24
+    ? [[0, 12], [obs.length - 6, obs.length]]
+    : [[0, obs.length]];
+  let out = "";
+  const escCh = ch => ch === "<" ? "&lt;" : ch === ">" ? "&gt;" : ch === "&" ? "&amp;" : ch;
+  for (const [a, b] of win) {
+    for (let i = a; i < b; i++) {
+      out += (obs[i] === base[i])
+        ? `<span class="same">${escCh(obs[i])}</span>`
+        : `<span class="diff">${escCh(obs[i])}</span>`;
+    }
+    if (b !== obs.length) out += "…";
+  }
+  for (let i = 0; i < obs.length; i++) if (obs[i] !== base[i]) diff++;
+  c.innerHTML = out;
+  if (markId) { const m = $(markId); m.textContent = diff ? `✗ ${diff}` : "✓"; m.className = diff ? "bad" : "ok"; }
+}
+
+function renderTimeline(h) {
+  const t = $("timeline");
+  if (!t) return;
+  t.innerHTML = "";
+  for (const c of h.slice(-40)) {
+    const d = document.createElement("span");
+    d.className = "dot " + c.state;
+    d.title = `seq ${c.seq} · ${c.state} · ${c.verdict}`;
+    d.onclick = () => openDrawer(c.seq);
+    t.appendChild(d);
+  }
+}
+
+function renderDonut(h) {
+  const cv = $("donut");
+  if (!cv || !h.length) return;
+  const fam = v => v === "OK" ? "ok" : v.startsWith("POLICY_") ? "policy" : v === "STALE" || v === "STALE_REPLAY" ? "stale" : "other";
+  const counts = { ok: 0, policy: 0, stale: 0, other: 0 };
+  for (const c of h) counts[fam(c.verdict)]++;
+  const total = h.length;
+  const parts = [
+    ["ok", "OK", "#22c55e"], ["policy", "POLICY_*", "#ef4444"],
+    ["stale", "STALE", "#f59e0b"], ["other", "other", "#38bdf8"]
+  ];
+  const ctx = cv.getContext("2d");
+  const cx = 90, cy = 90, R = 70, r = 44;
+  ctx.clearRect(0, 0, 180, 180);
+  let a = -Math.PI / 2;
+  for (const [k, label, col] of parts) {
+    const frac = counts[k] / total;
+    if (!frac) continue;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, a, a + frac * Math.PI * 2);
+    ctx.arc(cx, cy, r, a + frac * Math.PI * 2, a, true);
+    ctx.closePath();
+    ctx.fillStyle = col;
+    ctx.fill();
+    a += frac * Math.PI * 2;
+  }
+  ctx.fillStyle = "#e5e7eb"; ctx.font = "bold 22px sans-serif"; ctx.textAlign = "center";
+  ctx.fillText(total, cx, cy + 8);
+  $("donutLegend").innerHTML = parts
+    .map(([k, label, col]) => `<div><span class="sw" style="background:${col}"></span>${label}: ${counts[k]}</div>`)
+    .join("");
+}
+
 function renderHistory(h) {
   lastHist = h;
   const tb = document.querySelector("#feed tbody");
@@ -85,6 +164,8 @@ function renderHistory(h) {
     tb.appendChild(tr);
   }
   drawChart(h.slice(-40));
+  renderTimeline(h);
+  renderDonut(h.slice(-60));
 }
 
 function openDrawer(seq) {
@@ -242,6 +323,20 @@ $("bExport").onclick = async () => {
     URL.revokeObjectURL(a.href);
   } catch (e) { $("attackMsg").textContent = "export failed: " + e; }
 };
+let present = false;
+$("bPresent").onclick = () => {
+  present = !present;
+  document.body.classList.toggle("present", present);
+  $("bPresent").textContent = present ? "✕ exit" : "⛶ present";
+  try {
+    if (present && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+    else if (!present && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
+  } catch (e) {}
+};
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && present) $("bPresent").click();
+  if (e.key === "p" && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== "INPUT") $("bPresent").click();
+});
 document.querySelectorAll(".chip.f").forEach(b => b.onclick = () => {
   document.querySelectorAll(".chip.f").forEach(x => x.classList.remove("on"));
   b.classList.add("on");
@@ -261,8 +356,12 @@ async function tick() {
   if (paused) return;
   try {
     const [s, h] = await Promise.all([get("/api/status"), get("/api/history")]);
+    document.body.classList.remove("dead");
     renderStatus(s); renderHistory(h);
-  } catch (e) { $("detail").textContent = "engine unreachable: " + e + " (start it: scripts/run.ps1)"; }
+  } catch (e) {
+    document.body.classList.add("dead");
+    $("detail").textContent = "engine unreachable: " + e + " (start it: scripts/run.ps1)";
+  }
 }
 setClock(); setInterval(setClock, 1000);
 loadBaseline();

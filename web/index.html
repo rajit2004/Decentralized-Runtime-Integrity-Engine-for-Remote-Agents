@@ -17,6 +17,7 @@
     <div class="toolbar">
       <button id="bPause" class="chip" title="pause/resume live polling">⏸ pause</button>
       <button id="bSound" class="chip" title="beep on state change">🔇 sound</button>
+      <button id="bPresent" class="chip" title="fullscreen projector view">⛶ present</button>
       <button id="bExport" class="chip" title="download history JSON">⤓ export</button>
       <span id="chainBadge" class="badge">chain: …</span>
     </div>
@@ -36,9 +37,14 @@
     <p class="detail" id="detail">boot</p>
   </section>
 
+  <section class="card timeline-card">
+    <h2>State timeline <span class="dim">(last 40 cycles · click a dot for detail)</span></h2>
+    <div id="timeline" class="timeline"></div>
+  </section>
+
   <section class="grid">
     <div class="card">
-      <h2>Hash compare <span class="dim">(click any hash to copy)</span></h2>
+      <h2>Hash compare <span class="dim">(click any hash to copy · red chars = changed bytes)</span></h2>
       <div class="hashrow"><span>baseline (golden)</span><code id="hBase" data-copy="">-</code><b id="mBase"></b></div>
       <div class="hashrow"><span>observed (recomputed)</span><code id="hObs" data-copy="">-</code><b id="mObs"></b></div>
       <div class="hashrow"><span>chain (reported)</span><code id="hChain" data-copy="">-</code><b id="mChain"></b></div>
@@ -101,9 +107,18 @@
     <p class="hint" id="dDetail"></p>
   </section>
 
-  <section class="card">
-    <h2>Enrolled baseline <span class="dim">(golden, Phase 0)</span></h2>
-    <p class="hint" id="baseLine">loading…</p>
+  <section class="grid">
+    <div class="card">
+      <h2>Enrolled baseline <span class="dim">(golden, Phase 0)</span></h2>
+      <p class="hint" id="baseLine">loading…</p>
+    </div>
+    <div class="card">
+      <h2>Verdicts <span class="dim">(this session)</span></h2>
+      <div class="donut-wrap">
+        <canvas id="donut" width="180" height="180"></canvas>
+        <div id="donutLegend" class="legend"></div>
+      </div>
+    </div>
   </section>
 
   <footer>
