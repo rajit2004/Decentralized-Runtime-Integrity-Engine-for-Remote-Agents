@@ -23,10 +23,11 @@ anvil-data/
 hardhat-cache/
 .env
 
-# OS / IDE
+# OS / IDE - share run configs + iml, ignore workspace + shelf
 .DS_Store
 Thumbs.db
 .idea/*
 !.idea/.gitignore
-*.iml
+!.idea/*.iml
+!.idea/runConfigurations/
 .vscode/
