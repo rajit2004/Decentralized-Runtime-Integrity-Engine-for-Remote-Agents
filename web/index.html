@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Integrity Engine — agent-01</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Integrity Engine <span class="dim">— agent-01 · Track 1.6</span></h1>
+    <p class="sub">Signed <code>agentId|seq|ts|hBin|hCfg|hMem|hComb|prevHash</code> · chain = timeline · baseline = goodness</p>
+  </div>
+  <div class="top-right">
+    <div id="clock" class="clock">--:--:--</div>
+    <div id="chainBadge" class="badge">chain: …</div>
+  </div>
+</header>
+
+<main>
+  <section class="hero" id="hero">
+    <div class="state" id="state">STARTING</div>
+    <div class="hero-meta">
+      <div><span class="label">verdict</span><span id="verdict">BOOT</span></div>
+      <div><span class="label">changed</span><span id="component">-</span></div>
+      <div><span class="label">seq</span><span id="seq">-</span></div>
+      <div><span class="label">cycle</span><span id="cycle">-</span></div>
+      <div><span class="label">ledger</span><span id="tx" class="mono">-</span></div>
+    </div>
+    <p class="detail" id="detail">boot</p>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <h2>Hash compare</h2>
+      <div class="hashrow"><span>baseline (golden)</span><code id="hBase">-</code><b id="mBase"></b></div>
+      <div class="hashrow"><span>observed (recomputed)</span><code id="hObs">-</code><b id="mObs"></b></div>
+      <div class="hashrow"><span>chain (reported)</span><code id="hChain">-</code><b id="mChain"></b></div>
+      <div class="hashrow"><span>prevHash (link)</span><code id="hPrev">-</code><b></b></div>
+    </div>
+    <div class="card">
+      <h2>Demo attacks</h2>
+      <p class="hint">One click each. Watch the hero flip RED, then restore.</p>
+      <div class="btns">
+        <button id="bTamperCfg" class="danger">Tamper config file</button>
+        <button id="bRestoreCfg">Restore config</button>
+        <button id="bTamperMem" class="danger">Tamper memory (no file)</button>
+        <button id="bClearMem">Clear memory</button>
+      </div>
+      <p class="hint" id="attackMsg"></p>
+      <p class="hint">If still RED after restore, line endings shifted the hash — re-run Enroll-Baseline.</p>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <h2>Pipeline latency <span class="dim">(ms per cycle)</span></h2>
+      <canvas id="chart" width="560" height="160"></canvas>
+      <p class="hint" id="latencyNote">measure + verify per cycle · interval 5s · STALE after 12s</p>
+    </div>
+    <div class="card">
+      <h2>Cycle feed</h2>
+      <table id="feed">
+        <thead><tr><th>seq</th><th>state</th><th>verdict</th><th>comp</th><th>meas</th><th>ver</th><th>ledger</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <p>Open limits, stated first: Checker can lie without TPM/TEE · Boss re-read is demo-only (remote has signed measurement only) · memory = whitelisted map · <code>ledger.jsonl</code> is fallback, chain event log authoritative.</p>
+  </footer>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>
