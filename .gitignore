@@ -11,6 +11,7 @@ node_modules/
 artifacts/
 cache/
 *.log
+*.err
 ledger.jsonl
 history.csv
 
