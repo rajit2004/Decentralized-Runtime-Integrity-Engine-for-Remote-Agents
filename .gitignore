@@ -14,9 +14,15 @@ cache/
 ledger.jsonl
 history.csv
 
-# Keys - NEVER commit real private keys (demo keys only)
+# Keys - NEVER commit real private keys (demo keys only). keys/ outside writable config/.
+keys/*.pkcs8
+keys/*.x509
+!keys/.gitkeep
 *.key
 !demo-keys/.gitkeep
+# Runtime state (not golden)
+config/seq.dat
+ledger.jsonl
 
 # Local chain data
 anvil-data/
