@@ -1,49 +1,48 @@
-# Verification Logic — Why Baseline + Chain (Fix for Phase 1 Step 6 Hole)
+# Verification Logic — Frozen Shared Contract (v2)
 
-## The hole
-Old text: "Boss re-reads files and compares against chain."
-Problem: if attacker edits `config.json`, honest Checker anchors NEW hash, Boss recomputes SAME new hash, they match -> stays GREEN. Demo would fail.
+## Frozen wire (first 20 min, no changes after)
+Signed payload (UTF-8, pipe-separated):
+`agentId|seq|ts|hBin|hCfg|hMem|hComb|prevHash`
 
-## The fix
-Boss compares against **enrolled baseline** captured at Phase 0 in a trusted environment.
+Measurement JSON (Checker -> Verifier / ledger / dashboard):
+`{"agentId","seq","ts","hBin","hCfg","hMem","hComb","prevHash","sig","ledgerRef"}`
 
-- **Chain proves timeline:** what was reported, when, by whom, with no rollback/erase.
-- **Baseline proves goodness:** what the golden binary/config/memory hashes *should* be.
+Rules everyone shares:
+- Hashes 64-char lowercase hex.
+- `hComb = SHA256(raw32(hBin) || raw32(hCfg) || raw32(hMem))`, NOT hex strings.
+- `ts` Unix seconds. `seq` starts 1 (0 = genesis baseline).
+- `prevHash` = previous `hComb`. Genesis prev = 64 zeros or baseline `hComb`.
 
-Need both. Either alone fails.
+## Why baseline + chain (Phase 1 step 6 hole fix)
+Old hole: Boss compared only vs chain. Honest Checker anchoring edited hash still matched -> GREEN.
+Fix: Boss compares vs enrolled golden baseline. Chain=timeline, baseline=goodness. Need both.
 
 ## Enrollment (Phase 0, trusted)
-1. In clean room, compute `H_bin0, H_cfg0, H_mem0, H_comb0`.
-2. Admin signs enrollment: `Enroll{agentId, H_comb0, ts0}`.
-3. Store in Boss trusted store: `config/baseline.json` (read-only in demo) + anchor genesis `H_comb0` on chain as cycle 0.
-4. Distribute: Checker gets `privateKey`, Boss gets `publicKey + baseline.json + contractAddr`.
+1. Clean room: `hBin0,hCfg0,hMem0,hComb0` via `Enroller`.
+2. `config/baseline.json` = `{agentId,seq:0,ts,hBin,hCfg,hMem,hComb,prevHash:zeros}` — Boss trusted store, never overwritten from chain.
+3. `Integrity.enroll()` pins genesis on chain.
+4. Checker gets privKey, Boss gets pubKey + baseline + contractAddr.
 
-Baseline update (legit upgrade) requires new admin-signed enrollment. Not covered by normal heartbeat.
+## Steady check — Boss independent re-measure, then
+1. `hComb == SHA256(raws)` both sides, else `COMB_MISMATCH`.
+2. `Verify(pub, full 8-field payload, sig)` else `SIG_FAIL`.
+3. `prevHash == expectedPrev` else `PREV_HASH_BREAK` (missing/forked cycle).
+4. Per-component `H_re vs reported`: `MEASURE_MISMATCH_BIN/CFG/MEM` (lying Checker — tells which).
+5. Per-component `reported vs baseline`: `POLICY_BIN_CHANGED/CFG_CHANGED/MEM_CHANGED` (honest report, dirty state — tells which).
+6. `ts fresh + seq monotonic` else `STALE_REPLAY`.
 
-## Steady check (Phase 1, every 5s) — all 4 must pass
-Given `H_re` = Boss independent re-measurement, `H_chain` = latest on-chain hash, `H_base` = enrolled baseline:
+Chain cursor (`expectedPrev`, `lastSeq`) advances on OK **and** on POLICY_* so sustained tamper stays `POLICY_CFG_CHANGED` instead of flipping to `PREV_HASH_BREAK`. Dashboard shows `changed: binary|config|memory`.
 
-1. `Verify(pubKey, agentId|H_chain|ts|nonce, sig)` == true → origin OK, else `SIG_FAIL`
-2. `H_re == H_chain` → reporting honest, else `MEASURE_MISMATCH` (lying Checker / MITM)
-3. `H_re == H_base && H_chain == H_base` → state golden, else `POLICY_MISMATCH expected <H_base> got <H_re>`
-4. `now - ts < STALE_TIMEOUT && nonce > lastNonce` → fresh, else `STALE/REPLAY`
+## Attack table
+| Attack | Result |
+|---|---|
+| Clean | GREEN OK |
+| Edit config, honest Checker | RED POLICY_CFG_CHANGED comp=config, sustained |
+| Edit binary | RED POLICY_BIN_CHANGED comp=binary |
+| Flip memory var | RED POLICY_MEM_CHANGED comp=memory |
+| Lying Checker (anchor old) | RED MEASURE_MISMATCH_* comp=that component |
+| Replay old payload | RED STALE_REPLAY |
+| Drop cycle / fork prev | RED PREV_HASH_BREAK |
 
-Verdict GREEN only if 1+2+3+4 pass.
-
-## Attack table (for viva)
-| Attack | H_re | H_chain | H_base | Result |
-|---|---|---|---|---|
-| No attack | A | A | A | GREEN |
-| Edit config, honest Checker | B | B | A | RED POLICY_MISMATCH (2 passes, 3 fails) |
-| Edit config, lying Checker anchors old A | B | A | A | RED MEASURE_MISMATCH (2 fails) |
-| Replay old good payload | A_old | A_old | A | RED STALE/REPLAY (4 fails) |
-| Rewrite chain history | — | — | — | fails: local Anvil append-only + tx receipt check |
-
-## What to tell judges
-"Chain alone tells us *when* something was said. Baseline tells us *what good looks like*. We check both, plus independent re-measurement so a compromised Checker can't lie."
-
-## Implementation pointers
-- `Enroller.java` → writes `config/baseline.json` once.
-- `Verifier.java` → loads baseline at startup (immutable), does 4 checks, never updates baseline from chain.
-- `Dashboard.java` → shows `expected (baseline short) vs observed (recomputed short) vs chain short` on RED.
-- Demo: show `baseline.json` on screen before tamper, then edit config → RED shows mismatch vs that baseline.
+## Pitch line
+"Sig covers all three hashes plus seq/ts/prevHash. Boss tells binary vs config vs memory, chain proves order, baseline proves good."
