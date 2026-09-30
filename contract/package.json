@@ -1,0 +1,13 @@
+{
+  "name": "integrity-chain",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "node": "hardhat node --port 8545",
+    "deploy": "hardhat run scripts/deploy.js --network localhost"
+  },
+  "devDependencies": {
+    "hardhat": "^2.22.0",
+    "ethers": "^6.13.0"
+  }
+}
