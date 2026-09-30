@@ -32,9 +32,9 @@
 
 Remote agents — AI bots, edge workers, enterprise daemons — run where you can't see them. An attacker with file access can patch the binary, edit `config.json`, or flip an in-memory limit. How do you know?
 
-We don't prevent the edit. We **prove it happened in under 5 seconds**.
+We don't prevent the edit. We **prove it within one 5s interval plus ~4ms pipeline avg (~24ms worst, measured 20 trials). STALE if no fresh anchor after 12s.**
 
-Every 5 seconds the Checker takes 3 fingerprints, seals them, pastes them in a notebook nobody can erase (blockchain), and the Boss compares fresh fingerprints against that notebook **and** against a golden baseline enrolled on day one.
+Every 5 seconds the Checker takes 3 fingerprints, seals them, pastes them in the chain event log (authoritative; `ledger.jsonl` is a tamper-evident FALLBACK, not tamper-proof), and the Boss compares fresh fingerprints against that log **and** against a golden baseline enrolled on day one.
 
 > Chain proves *timeline*. Baseline proves *what good looks like*. You need both.
 
@@ -60,8 +60,8 @@ Built with **pure JDK Java (no Maven downloads)**, **Solidity Integrity.sol**, a
 * **Wax-Seal Signatures (frozen)**
   Payload `agentId|seq|ts|hBin|hCfg|hMem|hComb|prevHash` is signed with Ed25519 (`java.security`, no libs). All three component hashes covered, so Boss can blame binary vs config vs memory. `hComb = SHA256(raw32||raw32||raw32)`. Timestamp + monotonic `seq` + `prevHash` chain stops replay/fork.
 
-* **Tamper-Evident Diary**
-  `ChainAnchor.java` probes local chain (`eth_blockNumber` on `:8545`) and appends to `ledger.jsonl` always, so demo survives even if Anvil dies. Full contract call is `Integrity.sol.anchor()` with `enroll()` for genesis. Diary is append-only.
+* **Tamper-Evident Diary (chain authoritative, file fallback)**
+  `ChainAnchor.java` probes local chain (`:8545`, `block.timestamp` authoritative) and appends to `ledger.jsonl` FALLBACK always so demo survives Anvil death. History lives in `Anchored` events (event log); mapping holds latest only. Ed25519 verified OFF-CHAIN by Boss (EVM has none). File ledger is tamper-evident, not tamper-proof — Verifier `headHash()` memory catches rewrites within a run.
 
 * **Judge-Proof Verifier (per-component blame)**
   `Verifier.java` loads golden `hBin/hCfg/hMem/hComb` once (immutable). GREEN only if: 1) `hComb==SHA256(raws)`, 2) full 8-field seal valid, 3) `prevHash` chains, 4) `H_re==reported` per-component (catches lying Checker as `MEASURE_MISMATCH_BIN/CFG/MEM`), 5) `reported==baseline` per-component (catches edit as `POLICY_BIN/CFG/MEM_CHANGED`), 6) `ts` fresh + `seq` monotonic.
@@ -69,14 +69,20 @@ Built with **pure JDK Java (no Maven downloads)**, **Solidity Integrity.sol**, a
 * **Live GREEN / RED Dashboard**
   JDK `HttpServer` on `:8080`, zero deps. Big status light, cycle count, tx hash, expected-baseline vs observed vs chain (truncated), detail line with timings. Auto-refreshes every 2s. This is what judges stare at.
 
-* **Live Tamper Demo**
-  Edit `config/agent-config.json` from `100` to `999` and save. Next cycle (<5s) flips to RED `POLICY_MISMATCH expected c9be…aff2 got 7c21…`. Restore file, back to GREEN. No restart needed.
+* **Live Tamper Demo (3 flavors)**
+  Config: edit `config/agent-config.json` `100->999`, save. Next 5s cycle flips RED `POLICY_CFG_CHANGED comp=config`. Memory: open `/tamper/memory?limit=999` (no file edit) -> RED `POLICY_MEM_CHANGED`. Binary: main demo is config (JAR locked on Windows; test binary tamper on Linux/macOS or stopped agent). Restore -> GREEN. No restart.
 
 * **Lying-Checker Detection**
-  If Checker is compromised and anchors old good hash while files are dirty, Boss independent re-measurement catches it: `MEASURE_MISMATCH`. Two measure calls per cycle, not one.
+  If Checker anchors old good hash while files dirty, Boss independent recompute (demo only — remote has signed measurement only) catches `MEASURE_MISMATCH_BIN/CFG/MEM` and names the component. Two measure calls per cycle.
 
-* **Metrics on Every Cycle**
-  Console + dashboard show `measure Xms, verify Yms, chainUp true/false, detection < polling`. Typical laptop: measure ~5-15ms, verify ~2ms, anchor ~200ms local.
+* **Keys Outside Writable Dir (stated assumption)**
+  Private key in `keys/` (locked perms where OS allows), NOT next to `config.json`. A box-reader can still steal it — TPM/TEE is the real fix (stretch). Stated openly, see `docs/THREAT_MODEL.md`.
+
+* **Metrics on Every Cycle (measured, not promised)**
+  20 trials: pipeline avg 4ms (measure 0.6, sign 1.6, verify 2.0), worst 24ms. Detection = next 5s interval + pipeline. STALE after 12s via 1s watchdog. Batch: 10k-leaf root 93ms, 1 root/min = 0.0167 TPS vs naive 2000 TPS (120,000x). See `docs/BENCHMARKS.md`.
+
+* **Scale: Merkle Batching**
+  Fleet fix: collect window of `hComb`, anchor one root/min, keep per-device proofs. Demo heartbeat stays 5s; batch path proves 10k scale. See `docs/SCALING.md`.
 
 ### Reliability and Safety
 
@@ -87,7 +93,7 @@ Built with **pure JDK Java (no Maven downloads)**, **Solidity Integrity.sol**, a
   If `:8545` is down, engine keeps running on `ledger.jsonl` fallback and marks `chainUp=false`. You lose decentralization points but keep 35% demo marks.
 
 * **Stale / Replay Guard**
-  Rejects old timestamps (>30s) and reused nonces. Attacker can't resend last week's good cover.
+  Rejects timestamps older than 12s (chain `block.timestamp` authoritative when up) and reused/rewound `seq`. Attacker can't resend last week's good cover. `seq` persisted in `config/seq.dat` so restarts don't self-flag REPLAY.
 
 * **Windows-Safe Paths**
   Hashes `AgentState.java` source + config instead of locked `.exe`. Avoids file-lock false REDs on Windows demo laptops.
@@ -116,19 +122,19 @@ Phase 1 — Heartbeat (every 5s forever)
   Checker reads binary + config + memory
         |
         v
-  H_bin, H_cfg, H_mem -> H_comb
+  H_bin, H_cfg, H_mem -> H_comb=SHA256(raw32||raw32||raw32)
         |
         v
-  Sign(agentId|H_comb|ts|nonce) with privateKey
+  Sign(agentId|seq|ts|hBin|hCfg|hMem|hComb|prevHash) with keys/ privateKey
         |
         v
-  Anchor(H_comb, nonce, sig) to Integrity.sol / ledger.jsonl
+  Anchor full JSON to Integrity.sol (owner-only, block.timestamp) / ledger.jsonl FALLBACK
         |
         v
-  Boss independently re-reads files -> H_re
+  Boss independent recompute, demo only (remote has signed measurement only) -> H_re
         |
         v
-  4 checks: seal valid? H_re==H_chain? H==baseline? fresh?
+  Checks: comb valid? full seal valid (off-chain)? prevHash chains? H_re==reported per-component? reported==baseline per-component? seq/ts fresh (chain time authoritative)?
         |
         v
   GREEN (all pass) or RED (reason + expected vs got)
@@ -139,12 +145,15 @@ Phase 1 — Heartbeat (every 5s forever)
 
 Attack table for viva:
 
-| Attack | H_re | H_chain | H_base | Result |
-|---|---|---|---|---|
-| No attack | A | A | A | GREEN |
-| Edit config, honest Checker | B | B | A | RED POLICY_MISMATCH |
-| Edit config, lying Checker | B | A | A | RED MEASURE_MISMATCH |
-| Replay old payload | A_old | A_old | A | RED STALE/REPLAY |
+| Attack | Result |
+|---|---|
+| No attack | GREEN OK |
+| Edit config, honest Checker | RED POLICY_CFG_CHANGED comp=config, sustained |
+| Edit binary | RED POLICY_BIN_CHANGED comp=binary |
+| Memory flip via endpoint | RED POLICY_MEM_CHANGED comp=memory |
+| Lying Checker (anchor old) | RED MEASURE_MISMATCH_* comp=that component |
+| Replay / reorder | RED STALE_REPLAY (seq/ts/prevHash) |
+| Checker killed | STALE after 12s via 1s watchdog (headHash shown) |
 
 ---
 
@@ -157,9 +166,12 @@ Attack table for viva:
 | **Chain** | Solidity 0.8.20 `Integrity.sol`, Hardhat / Anvil local node |
 | **Chain Client** | Java `HttpClient` JSON-RPC probe + Node ethers deploy script |
 | **Dashboard** | Java `HttpServer` on `:8080`, no framework |
-| **Canonicalization** | `TreeMap` sorted `k=v;` (no Jackson needed) |
-| **Config** | `config/agent-config.json`, `config/baseline.json` |
-| **Fallback Ledger** | `ledger.jsonl` append-only |
+| **Canonicalization** | Manual `TreeMap` sorted `k=v;` — no Jackson (SORT_KEYS trap avoided by design) |
+| **Config** | `config/agent-config.json`, `config/baseline.json` (golden), `config/seq.dat` (persisted cursor) |
+| **Keys** | `keys/` outside writable `config/` (assumption stated; TPM/TEE real fix) |
+| **Batch** | `batch/MerkleTree` root/min + proofs (10k scale) |
+| **Fallback Ledger** | `ledger.jsonl` FALLBACK tamper-evident (headHash in memory), chain event log authoritative |
+| **Timing** | 5s interval, STALE after 12s, 1s watchdog; pipeline avg 4ms worst 24ms |
 
 ---
 
@@ -248,10 +260,10 @@ You should see GREEN flowing with cycle + tx.
 ### 5. Tamper Live (the demo)
 
 1. Open `config/agent-config.json`, change `"threshold": 100` to `999`, save.
-2. In <5s dashboard flips RED: `POLICY_MISMATCH expected c9be…aff2 got …`.
-3. Restore to `100`, save. Back to GREEN next cycle.
+2. Next 5s cycle flips RED: `POLICY_CFG_CHANGED comp=config` (sustained, not one-off). Worst-case detection = 5s + 24ms pipeline; STALE after 12s if Checker killed.
+3. Restore to `100`, save. Back to GREEN next cycle. Memory variant: open `/tamper/memory?limit=999` -> `POLICY_MEM_CHANGED` without file edit.
 
-Show judges `baseline.json` on screen before step 1 — that proves what good is.
+Show judges `baseline.json` on screen before step 1 — that proves what good is. Volunteer limits first: compromised Checker can sign lies (TPM/TEE stretch), Boss re-read is demo-only, memory = whitelisted map.
 
 ---
 
@@ -259,18 +271,20 @@ Show judges `baseline.json` on screen before step 1 — that proves what good is
 
 All from `Verifier.java`:
 
-* `OK` — all 4 checks pass, GREEN
-* `SIG_FAIL` — wax seal invalid, key mismatch or forged payload
-* `MEASURE_MISMATCH` — `H_re != H_chain`, Checker lied or MITM. Expected = chain, observed = recomputed.
-* `POLICY_MISMATCH` — honest report but dirty state. Expected = baseline golden, observed = recomputed. This is normal file-edit attack.
-* `STALE_REPLAY` — old timestamp or reused nonce.
+* `OK` — all checks pass, GREEN
+* `SIG_FAIL` — full 8-field seal invalid (Boss verifies off-chain; EVM has no Ed25519)
+* `MEASURE_MISMATCH_BIN/CFG/MEM` — Boss recompute vs reported diverge per-component (lying Checker/MITM)
+* `POLICY_BIN/CFG/MEM_CHANGED` — honest report but dirty vs golden baseline per-component
+* `COMB_MISMATCH` — `hComb != SHA256(raws)`
+* `PREV_HASH_BREAK` — missing/forked cycle (chain linkage)
+* `STALE_REPLAY` — old `block.timestamp`-checked time or reused `seq`
 
-Contract API (`Integrity.sol`):
+Contract API (`Integrity.sol`, owner-only, `block.timestamp` authoritative):
 
-* `enroll(agentId, hBase)` — once, cycle 0 genesis
-* `anchor(agentId, hComb, nonce, sig)` — every heartbeat
-* `getLatest(agentId)` — returns `(hComb, ts, sig, nonce)`
-* Events: `Enrolled`, `Anchored`
+* `enroll(agentId, hBin, hCfg, hMem, hComb)` — once, cycle 0 genesis, sets `ownerOf`
+* `anchor(agentId, seq, hBin, hCfg, hMem, hComb, prevHash, sig)` — heartbeat, `require(msg.sender==owner)`, `prevHash` linkage
+* `getLatest(agentId)` — returns full `Record`
+* Events (history lives here; mapping holds latest only): `Enrolled(bytes32 indexed agentIdHash, ...)`, `Anchored(bytes32 indexed agentIdHash, ...)`
 
 ---
 
@@ -299,7 +313,7 @@ git commit -m "feat(verify): explain policy mismatch better"
 git push origin feat/amazing-check
 ```
 
-Never commit real `*.key` files. Demo keys are ephemeral per run.
+New commits only — no amend, no force-push. Never commit `keys/*.pkcs8`, `keys/*.x509`, or real `*.key` files. Demo keys generate once into ignored `keys/`.
 
 ---
 
@@ -324,4 +338,11 @@ Track 1.6 — Decentralized Runtime Integrity Engine for Remote Agents
 
 [![GitHub](https://img.shields.io/badge/GitHub-rajit2004-black?style=flat&logo=github)](https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-for-Remote-Agents)
 
-> One-liner for viva: *"Chain proves timeline. Baseline proves goodness. We check both, with independent re-measurement, every 5 seconds."*
+> One-liner for viva: *"Sig covers all three hashes plus seq/ts/prevHash. Chain proves order, baseline proves good. We name binary vs config vs memory. Limits: Checker can lie without TPM, re-read is demo-only, memory is a whitelist."*
+
+## Open Limits (volunteer before judges ask)
+* Compromised Checker can sign false hashes — TPM/TEE is the stretch goal.
+* Boss file re-read works because demo is one laptop; remote verifier uses signed measurement + baseline + chain only.
+* Memory = `AgentState{mode,limit,version}` whitelist, not heap (heap never stabilizes).
+* `ledger.jsonl` is FALLBACK tamper-evident; chain event log authoritative.
+* Stack: JDK-only MVP (`javac`/`java`, no Maven/Spring/Gradle/Javalin/web3j wrapper needed). Binary tamper is secondary on Windows (JAR locked / classes dir); config + memory endpoint are the live demos. File reads retry 200ms; missing file = tamper.
