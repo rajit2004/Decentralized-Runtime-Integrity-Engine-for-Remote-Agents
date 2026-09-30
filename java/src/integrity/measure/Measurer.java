@@ -24,8 +24,17 @@ public final class Measurer {
         return sb.toString();
     }
 
+    /**
+     * Windows-safe read: retry once after 200ms on sharing violation (item 20).
+     * Missing file throws -> caller treats as tamper, never as OK.
+     */
     public static String hashFile(Path p) throws Exception {
-        return sha256Hex(Files.readAllBytes(p));
+        try {
+            return sha256Hex(Files.readAllBytes(p));
+        } catch (java.io.IOException e) {
+            Thread.sleep(200);
+            return sha256Hex(Files.readAllBytes(p)); // throws again -> tamper path
+        }
     }
 
     public static String canonicalState(Map<String, String> state) {

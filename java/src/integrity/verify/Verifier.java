@@ -38,11 +38,27 @@ public final class Verifier {
     private String expectedPrev;
     private final long staleSec;
     private boolean first = true;
+    // Item 5 watchdog + item 10 headHash: tamper-evident ledger cursor.
+    // headHash remembers last accepted hComb; a rewritten file ledger with
+    // recomputed hashes still breaks prevHash linkage against this memory.
+    private volatile long lastFreshWallSec = System.currentTimeMillis() / 1000;
+    private volatile String headHash;
 
     public Verifier(String agentId, PublicKey pub, Baseline base, long staleSec) {
         this.agentId = agentId; this.pub = pub; this.base = base; this.staleSec = staleSec;
         this.expectedPrev = base.hComb();
+        this.headHash = base.hComb();
     }
+
+    /** Item 5/10: watchdog cursor. Call on every accepted-or-policy measurement. */
+    public void noteFresh(long wallSec, String hComb) {
+        lastFreshWallSec = wallSec;
+        headHash = hComb;
+    }
+
+    public boolean isStale(long nowSec) { return (nowSec - lastFreshWallSec) > staleSec; }
+    public String headHash() { return headHash; }
+    public long lastFresh() { return lastFreshWallSec; }
 
     public static String get(String json, String key) {
         String k = "\"" + key + "\"";
@@ -66,10 +82,19 @@ public final class Verifier {
                 get(s, "hCfg").toLowerCase(), get(s, "hMem").toLowerCase(), get(s, "hComb").toLowerCase());
     }
 
-    /** Full check. re = Boss independent measurement, m = Checker reported (already anchored). */
+    /** Full check. re = Boss independent measurement (demo only — remote has signed measurement only), m = reported. */
     public Verdict check(Measurer.Measurement re, SignedMeasurement m) throws Exception {
+        return check(re, m, m.ts(), false);
+    }
+
+    /**
+     * Item 8: effectiveTs = chain block.timestamp when fromChain, else Checker ts.
+     * A compromised Checker can lie about ts; chain time is authoritative.
+     */
+    public Verdict check(Measurer.Measurement re, SignedMeasurement m, long effectiveTs, boolean fromChain) throws Exception {
         long now = System.currentTimeMillis() / 1000;
-        if (Math.abs(now - m.ts()) > staleSec) return new Verdict(Reason.STALE_REPLAY, "fresh-ts", Long.toString(m.ts()), "stale timestamp");
+        long refTs = fromChain ? effectiveTs : m.ts();
+        if (Math.abs(now - refTs) > staleSec) return new Verdict(Reason.STALE_REPLAY, "fresh-ts", Long.toString(refTs), "stale timestamp (chain-authoritative=" + fromChain + ")");
         if (!first && m.seq() <= lastSeq) return new Verdict(Reason.STALE_REPLAY, "seq>" + lastSeq, "seq=" + m.seq(), "replay or reorder");
 
         // 1. comb integrity both sides (raw-bytes rule)
@@ -106,20 +131,24 @@ public final class Verifier {
         // sustained tamper must stay POLICY_* (not flip to PREV_HASH_BREAK).
         if (!m.hBin().equalsIgnoreCase(base.hBin())) {
             lastSeq = m.seq(); expectedPrev = m.hComb(); first = false;
+            noteFresh(System.currentTimeMillis() / 1000, m.hComb());
             return new Verdict(Reason.POLICY_BIN_CHANGED, base.hBin(), m.hBin(), "BINARY changed vs golden baseline");
         }
         if (!m.hCfg().equalsIgnoreCase(base.hCfg())) {
             lastSeq = m.seq(); expectedPrev = m.hComb(); first = false;
+            noteFresh(System.currentTimeMillis() / 1000, m.hComb());
             return new Verdict(Reason.POLICY_CFG_CHANGED, base.hCfg(), m.hCfg(), "CONFIG changed vs golden baseline");
         }
         if (!m.hMem().equalsIgnoreCase(base.hMem())) {
             lastSeq = m.seq(); expectedPrev = m.hComb(); first = false;
+            noteFresh(System.currentTimeMillis() / 1000, m.hComb());
             return new Verdict(Reason.POLICY_MEM_CHANGED, base.hMem(), m.hMem(), "MEMORY changed vs golden baseline");
         }
 
         lastSeq = m.seq();
         expectedPrev = m.hComb();
         first = false;
+        noteFresh(System.currentTimeMillis() / 1000, m.hComb());
         return new Verdict(Reason.OK, base.hComb(), re.hComb(), "sig+measure+baseline+chain all pass seq=" + m.seq());
     }
 

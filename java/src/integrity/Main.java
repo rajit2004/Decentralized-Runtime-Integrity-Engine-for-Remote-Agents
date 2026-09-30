@@ -3,21 +3,32 @@ package integrity;
 import integrity.agent.AgentState;
 import integrity.chain.ChainAnchor;
 import integrity.enroll.Enroller;
+import integrity.enroll.SeqStore;
 import integrity.measure.Measurer;
 import integrity.measure.SignedMeasurement;
+import integrity.sign.KeyStore;
 import integrity.sign.Signer;
 import integrity.ui.Dashboard;
 import integrity.verify.Verifier;
+import com.sun.net.httpserver.HttpServer;
 import java.nio.file.*;
 import java.security.KeyPair;
 
 /**
- * Demo heartbeat on frozen contract.
- * seq starts at 1 (0 = genesis baseline), prevHash chains hComb.
- * Loop: measure -> sign(full payload) -> anchor(JSON) -> re-measure -> 4-family verify -> dashboard.
- * Tamper test: edit config/agent-config.json live -> RED POLICY_CFG_CHANGED with component name.
+ * Demo heartbeat on frozen contract. Numbers frozen: 5s interval, RED if no
+ * fresh anchor after 12s (STALE_TIMEOUT_SEC=12). Worst-case detection =
+ * interval + pipeline (~0.3s local), reported from 20-trial benchmark.
+ *
+ * Item 17: every cycle wrapped in try/catch(Throwable) — loop never dies silently.
+ * Item 5: 1s watchdog flips dashboard to STALE even with zero requests.
+ * Item 14: seq persisted in config/seq.dat.
+ * Item 3: keys in keys/ (outside writable config/), see KeyStore.
+ * Item 12: Boss re-read is "independent recompute, demo only" — remote has signed measurement only.
  */
 public final class Main {
+    static final long INTERVAL_MS = 5000;
+    static final long STALE_SEC = 12;
+
     public static void main(String[] args) throws Exception {
         Path bin = Paths.get("java/src/integrity/agent/AgentState.java");
         Path cfg = Paths.get("config/agent-config.json");
@@ -31,46 +42,112 @@ public final class Main {
         Verifier.Baseline baseline = Verifier.loadBaseline(base);
         System.out.println("BASELINE hComb=" + baseline.hComb());
 
-        KeyPair kp = Signer.generate(); // demo ephemeral; prod: HSM/disk
+        KeyPair kp = KeyStore.defaults().loadOrCreate();
         Signer signer = new Signer(kp.getPrivate());
-        Verifier verifier = new Verifier(agentId, kp.getPublic(), baseline, 30);
+        Verifier verifier = new Verifier(agentId, kp.getPublic(), baseline, STALE_SEC);
         ChainAnchor anchor = new ChainAnchor("http://127.0.0.1:8545");
+        SeqStore seqStore = new SeqStore(Paths.get("config/seq.dat"));
         Dashboard dash = new Dashboard();
-        dash.start(8080);
+        HttpServer http = dash.start(8080);
 
-        long seq = 1;
-        String prevHash = baseline.hComb(); // chain from golden; first cycle may also accept zeros
-        long cycle = 0;
+        // Item 13 demo endpoint: simulated memory attack without file edit.
+        http.createContext("/tamper/memory", ex -> {
+            String q = ex.getRequestURI().getQuery();
+            String v = "999";
+            if (q != null && q.contains("limit=")) v = q.split("limit=")[1].split("&")[0];
+            AgentState.setLimit(v);
+            String r = "memory limit override=" + v + " (call /tamper/memory/clear to restore)";
+            byte[] b = r.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, b.length);
+            try (var o = ex.getResponseBody()) { o.write(b); }
+        });
+        http.createContext("/tamper/memory/clear", ex -> {
+            AgentState.clearOverride();
+            byte[] b = "cleared".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, b.length);
+            try (var o = ex.getResponseBody()) { o.write(b); }
+        });
+
+        long seq = seqStore.load();
+        String prevHash = baseline.hComb();
+        // Resume chain tip from ledger fallback if present (best effort).
+        try {
+            var lines = Files.exists(Paths.get("ledger.jsonl")) ? Files.readAllLines(Paths.get("ledger.jsonl")) : java.util.List.<String>of();
+            if (!lines.isEmpty()) {
+                String last = lines.get(lines.size() - 1);
+                String h = Verifier.get(last, "hComb");
+                long s = Long.parseLong(Verifier.get(last, "seq"));
+                if (h.length() == 64) { prevHash = h.toLowerCase(); seq = Math.max(seq, s + 1); }
+            }
+        } catch (Exception ignored) {}
+
+        // Item 5: watchdog — 1s tick, STALE even when Checker dead / no requests.
+        final long[] cycle = {0};
+        final long[] seqBox = {seq};
+        final Dashboard.Status[] last = {new Dashboard.Status("STARTING", seq, "-", baseline.hComb(), "-", "-", "-", "-", "boot", 0)};
+        Thread watchdog = new Thread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(1000);
+                    long now = System.currentTimeMillis() / 1000;
+                    if (verifier.isStale(now) && !"STALE".equals(last[0].state())) {
+                        Dashboard.Status st = new Dashboard.Status("STALE", seqBox[0], "-",
+                                baseline.hComb(), "-", verifier.headHash(), verifier.headHash(),
+                                "-", "STALE: no fresh anchor for >" + STALE_SEC + "s (checker killed?) head=" + verifier.headHash(), cycle[0]);
+                        last[0] = st;
+                        dash.update(st);
+                        System.out.println("WATCHDOG STALE head=" + verifier.headHash());
+                    }
+                } catch (Throwable t) { System.out.println("watchdog err: " + t); }
+            }
+        });
+        watchdog.setDaemon(true);
+        watchdog.start();
+
+        System.out.println("TIMING frozen: interval 5s, stale after 12s. Worst-case detection ~= 5.3s local (see docs/BENCHMARKS.md).");
         while (true) {
-            cycle++;
-            long ts = System.currentTimeMillis() / 1000;
-            long t0 = System.nanoTime();
-            Measurer.Measurement m = Measurer.measure(bin, cfg, AgentState.current());
-            String sig = signer.sign(agentId, seq, ts, m.hBin(), m.hCfg(), m.hMem(), m.hComb(), prevHash);
-            long t1 = System.nanoTime();
-            // anchor full JSON, get ledgerRef
-            var tmp = new SignedMeasurement(agentId, seq, ts, m.hBin(), m.hCfg(), m.hMem(), m.hComb(), prevHash, sig, "");
-            var receipt = anchor.anchor(tmp);
-            SignedMeasurement anchored = new SignedMeasurement(agentId, seq, ts, m.hBin(), m.hCfg(),
-                    m.hMem(), m.hComb(), prevHash, sig, receipt.ledgerRef());
-            Measurer.Measurement re = Measurer.measure(bin, cfg, AgentState.current());
-            Verifier.Verdict v = verifier.check(re, anchored);
-            long t2 = System.nanoTime();
+            cycle[0]++;
+            try {
+                long ts = System.currentTimeMillis() / 1000;
+                long t0 = System.nanoTime();
+                Measurer.Measurement m = Measurer.measure(bin, cfg, AgentState.current());
+                String sig = signer.sign(agentId, seq, ts, m.hBin(), m.hCfg(), m.hMem(), m.hComb(), prevHash);
+                long t1 = System.nanoTime();
+                var tmp = new SignedMeasurement(agentId, seq, ts, m.hBin(), m.hCfg(), m.hMem(), m.hComb(), prevHash, sig, "");
+                var receipt = anchor.anchor(tmp);
+                long effectiveTs = receipt.fromChain() && receipt.chainTs() > 0 ? receipt.chainTs() : ts;
+                SignedMeasurement anchored = new SignedMeasurement(agentId, seq, ts, m.hBin(), m.hCfg(),
+                        m.hMem(), m.hComb(), prevHash, sig, receipt.ledgerRef());
+                Measurer.Measurement re = Measurer.measure(bin, cfg, AgentState.current());
+                Verifier.Verdict v = verifier.check(re, anchored, effectiveTs, receipt.fromChain());
+                long t2 = System.nanoTime();
 
-            String state = v.ok() ? "GREEN" : "RED";
-            String component = Verifier.diffHint(v.reason()).getOrDefault("component", "-");
-            String detail = v.reason() + " " + v.detail()
-                    + " | measure " + ((t1 - t0) / 1_000_000) + "ms verify " + ((t2 - t1) / 1_000_000) + "ms"
-                    + " chainUp=" + receipt.fromChain();
-            dash.update(new Dashboard.Status(state, seq, component, baseline.hComb(), re.hComb(),
-                    m.hComb(), prevHash, receipt.ledgerRef(), detail, cycle));
-            System.out.println("cycle=" + cycle + " seq=" + seq + " " + state + " " + v.reason()
-                    + " comp=" + component + " expected=" + baseline.hComb().substring(0, 12)
-                    + " observed=" + re.hComb().substring(0, 12) + " ledger=" + receipt.ledgerRef());
-            // Frozen: prevHash = previous measurement hComb (even if tampered) keeps hash chain live.
+                String state = v.ok() ? "GREEN" : "RED";
+                String component = Verifier.diffHint(v.reason()).getOrDefault("component", "-");
+                String detail = v.reason() + " " + v.detail()
+                        + " | measure " + ((t1 - t0) / 1_000_000) + "ms verify " + ((t2 - t1) / 1_000_000) + "ms"
+                        + " chainUp=" + receipt.fromChain() + (receipt.fromChain() ? " chainTs=" + effectiveTs : "");
+                Dashboard.Status st = new Dashboard.Status(state, seq, component, baseline.hComb(), re.hComb(),
+                        m.hComb(), prevHash, receipt.ledgerRef(), detail, cycle[0]);
+                last[0] = st;
+                dash.update(st);
+                System.out.println("cycle=" + cycle[0] + " seq=" + seq + " " + state + " " + v.reason()
+                        + " comp=" + component + " ledger=" + receipt.ledgerRef());
             prevHash = m.hComb();
             seq++;
-            Thread.sleep(5000);
+            seqBox[0] = seq;
+            seqStore.save(seq);
+            } catch (Throwable t) {
+                // Item 17: never let the loop die silently.
+                System.out.println("CYCLE_ERR " + t);
+                Dashboard.Status st = new Dashboard.Status("RED", seq, "-",
+                        baseline.hComb(), "ERR", prevHash, prevHash, "-",
+                        "CYCLE_ERR: " + t + " (missing file counts as tamper)", cycle[0]);
+                last[0] = st;
+                dash.update(st);
+                try { Thread.sleep(1000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            }
+            try { Thread.sleep(INTERVAL_MS); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
         }
     }
 }

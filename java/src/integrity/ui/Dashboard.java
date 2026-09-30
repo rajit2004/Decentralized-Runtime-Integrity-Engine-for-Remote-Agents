@@ -17,7 +17,7 @@ public final class Dashboard {
 
     public void update(Status s) { cur.set(s); }
 
-    public void start(int port) throws IOException {
+    public HttpServer start(int port) throws IOException {
         HttpServer h = HttpServer.create(new InetSocketAddress(port), 0);
         h.createContext("/", ex -> {
             Status s = cur.get();
@@ -40,6 +40,7 @@ public final class Dashboard {
         });
         h.start();
         System.out.println("Dashboard on http://localhost:" + port);
+        return h;
     }
 
     private static String shortH(String h) {
