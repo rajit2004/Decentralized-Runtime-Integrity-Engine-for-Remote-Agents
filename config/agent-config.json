@@ -1,0 +1,6 @@
+{
+  "agentId": "agent-01",
+  "pollingSec": 5,
+  "threshold": 100,
+  "mode": "AUTO"
+}
