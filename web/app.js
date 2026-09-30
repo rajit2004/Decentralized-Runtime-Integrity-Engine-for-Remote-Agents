@@ -1,19 +1,46 @@
 /* Integrity dashboard client. Polls /api/status + /api/history every 1s. No deps. */
 const $ = id => document.getElementById(id);
 const shortH = h => (!h || h.length < 16) ? (h || "-") : h.slice(0, 12) + "…" + h.slice(-6);
+let paused = false, sound = false, filter = "ALL", lastState = "", lastHist = [];
+let audio = null;
 
 async function get(p) {
   const r = await fetch(p, { cache: "no-store" });
   if (!r.ok) throw new Error(p + " " + r.status);
   return r.json();
 }
+async function text(p) {
+  const r = await fetch(p, { cache: "no-store" });
+  const t = await r.text();
+  try { return JSON.parse(t).msg || t; } catch (e) { return t; }
+}
 
 function setClock() {
-  const d = new Date();
-  $("clock").textContent = d.toLocaleTimeString();
+  $("clock").textContent = new Date().toLocaleTimeString();
+}
+
+function beep(bad) {
+  if (!sound) return;
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.connect(g); g.connect(audio.destination);
+    o.frequency.value = bad ? 220 : 660;
+    g.gain.setValueAtTime(0.12, audio.currentTime);
+    o.start(); o.stop(audio.currentTime + (bad ? 0.3 : 0.12));
+  } catch (e) {}
+}
+
+function flash(state) {
+  const h = $("hero");
+  h.classList.remove("flash-green", "flash-red");
+  void h.offsetWidth;
+  h.classList.add(state === "GREEN" ? "flash-green" : "flash-red");
 }
 
 function renderStatus(s) {
+  if (s.state !== lastState && lastState !== "") { flash(s.state); beep(s.state !== "GREEN"); }
+  lastState = s.state;
   const st = $("state");
   st.textContent = s.state;
   st.className = "state " + s.state;
@@ -24,44 +51,70 @@ function renderStatus(s) {
   $("tx").textContent = s.tx;
   $("detail").textContent = s.detail;
   $("chainBadge").textContent = "chain: " + (s.chainUp ? "UP" : "fallback");
-  $("hBase").textContent = shortH(s.expected); $("hBase").title = s.expected;
-  $("hObs").textContent = shortH(s.observed); $("hObs").title = s.observed;
-  $("hChain").textContent = shortH(s.chain); $("hChain").title = s.chain;
-  $("hPrev").textContent = shortH(s.prevHash); $("hPrev").title = s.prevHash;
-  mark("mBase", true);
-  mark("mObs", s.observed === s.expected);
-  mark("mChain", s.chain === s.expected);
+  setHash("hBase", "mBase", s.expected, true);
+  setHash("hObs", "mObs", s.observed, s.observed === s.expected);
+  setHash("hChain", "mChain", s.chain, s.chain === s.expected);
+  setHash("hPrev", null, s.prevHash, true, true);
   $("latencyNote").textContent =
     `measure ${s.measureMs}ms · verify ${s.verifyMs}ms · interval 5s · STALE after 12s`;
 }
 
-function mark(id, ok) {
-  const e = $(id);
-  e.textContent = ok ? "✓" : "✗";
-  e.className = ok ? "ok" : "bad";
+function setHash(codeId, markId, full, ok, neutral) {
+  const c = $(codeId);
+  c.textContent = shortH(full); c.title = full || "";
+  c.dataset.copy = full || "";
+  if (markId) {
+    const m = $(markId);
+    if (neutral || !full || full === "-") { m.textContent = ""; }
+    else { m.textContent = ok ? "✓" : "✗"; m.className = ok ? "ok" : "bad"; }
+  }
 }
 
 function renderHistory(h) {
+  lastHist = h;
   const tb = document.querySelector("#feed tbody");
   tb.innerHTML = "";
-  const rows = h.slice(-14).reverse();
+  const rows = h.filter(c => filter === "ALL" || c.state === filter).slice(-14).reverse();
   for (const c of rows) {
     const tr = document.createElement("tr");
     tr.className = c.state;
+    tr.dataset.seq = c.seq;
     tr.innerHTML = `<td>${c.seq}</td><td>${c.state}</td><td>${c.verdict}</td>` +
       `<td>${c.component}</td><td>${c.measureMs}</td><td>${c.verifyMs}</td><td>${c.tx}</td>`;
+    tr.onclick = () => openDrawer(c.seq);
     tb.appendChild(tr);
   }
   drawChart(h.slice(-40));
 }
 
+function openDrawer(seq) {
+  const c = lastHist.find(x => String(x.seq) === String(seq));
+  if (!c) return;
+  document.querySelectorAll("#feed tr").forEach(tr => tr.classList.toggle("sel", tr.dataset.seq === String(seq)));
+  $("drawer").hidden = false;
+  $("dTitle").textContent = `— seq ${c.seq} · cycle ${c.cycle} · ${c.state}`;
+  $("dVerdict").textContent = c.verdict + " / " + c.component;
+  setHash("dExp", null, c.expected, true, true);
+  setHash("dObs", null, c.observed, true, true);
+  setHash("dChain", null, c.chain, true, true);
+  setHash("dPrev", null, c.prevHash, true, true);
+  $("dTx").textContent = c.tx;
+  $("dDetail").textContent = c.detail || "";
+  $("drawer").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+$("dClose").onclick = () => {
+  $("drawer").hidden = true;
+  document.querySelectorAll("#feed tr").forEach(tr => tr.classList.remove("sel"));
+};
+
 function drawChart(h) {
   const cv = $("chart"), ctx = cv.getContext("2d");
   const W = cv.width, H = cv.height;
   ctx.clearRect(0, 0, W, H);
+  if (!h.length) return;
   const max = Math.max(10, ...h.map(c => Math.max(c.measureMs, c.verifyMs)));
-  const grid = (v, col) => {
-    ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.beginPath();
+  const line = (v, col) => {
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.beginPath();
     h.forEach((c, i) => {
       const x = (i / Math.max(1, h.length - 1)) * (W - 8) + 4;
       const y = H - 8 - (v(c) / max) * (H - 20);
@@ -69,9 +122,8 @@ function drawChart(h) {
     });
     ctx.stroke();
   };
-  // red dots where RED
-  grid(c => c.measureMs, "#38bdf8");
-  grid(c => c.verifyMs, "#a78bfa");
+  line(c => c.measureMs, "#38bdf8");
+  line(c => c.verifyMs, "#a78bfa");
   ctx.fillStyle = "#8ea0c2"; ctx.font = "11px sans-serif";
   ctx.fillText("— measure", 8, 14); ctx.fillStyle = "#38bdf8"; ctx.fillRect(70, 6, 14, 3);
   ctx.fillStyle = "#8ea0c2"; ctx.fillText("— verify", 92, 14); ctx.fillStyle = "#a78bfa"; ctx.fillRect(150, 6, 14, 3);
@@ -84,25 +136,134 @@ function drawChart(h) {
   });
 }
 
-async function attack(url, msgId) {
-  try {
-    const r = await fetch(url, { cache: "no-store" });
-    const t = await r.text();
-    try { $("attackMsg").textContent = JSON.parse(t).msg || t; }
-    catch (e) { $("attackMsg").textContent = t; }
-  } catch (e) { $("attackMsg").textContent = "failed: " + e; }
+// ---- copy any hash ----
+document.addEventListener("click", e => {
+  const c = e.target.closest("code[data-copy]");
+  if (!c || !c.dataset.copy) return;
+  const done = () => { $("copyMsg").textContent = "copied " + shortH(c.dataset.copy); };
+  if (navigator.clipboard) navigator.clipboard.writeText(c.dataset.copy).then(done).catch(() => fallbackCopy(c.dataset.copy, done));
+  else fallbackCopy(c.dataset.copy, done);
+});
+function fallbackCopy(t, done) {
+  const ta = document.createElement("textarea");
+  ta.value = t; document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); done(); } catch (e) {}
+  ta.remove();
 }
 
+// ---- attack buttons ----
+async function attack(url) {
+  try { $("attackMsg").textContent = await text(url); }
+  catch (e) { $("attackMsg").textContent = "failed: " + e + " (is the engine running?)"; }
+}
 $("bTamperCfg").onclick = () => attack("/api/tamper/config");
 $("bRestoreCfg").onclick = () => attack("/api/restore/config");
 $("bTamperMem").onclick = () => attack("/tamper/memory?limit=999");
 $("bClearMem").onclick = () => attack("/tamper/memory/clear");
 
+// ---- guided scenarios ----
+function step(txt, cls) {
+  const li = document.createElement("li");
+  li.textContent = txt;
+  if (cls) li.className = cls;
+  $("scenarioSteps").appendChild(li);
+  return li;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function waitFor(pred, timeoutMs, label) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    try { const s = await get("/api/status"); if (pred(s)) return s; } catch (e) {}
+    await sleep(1000);
+  }
+  throw new Error("timeout waiting for " + label);
+}
+async function runScenario(kind) {
+  const btns = [$("bScenario"), $("bScenarioMem")];
+  btns.forEach(b => b.disabled = true);
+  $("scenarioSteps").innerHTML = "";
+  try {
+    if (kind === "config") {
+      let li = step("Armed: flipping threshold 100 → 999 in config file…", "run");
+      $("attackMsg").textContent = await text("/api/tamper/config");
+      li.className = "done";
+      li = step("Waiting for next 5s heartbeat to catch it…", "run");
+      const red = await waitFor(s => s.state === "RED", 15000, "RED");
+      li.textContent = `Caught: ${red.verdict} comp=${red.component} seq=${red.seq}`;
+      li.className = "done";
+      li = step("Restoring threshold 999 → 100…", "run");
+      $("attackMsg").textContent = await text("/api/restore/config");
+      li.className = "done";
+      li = step("Waiting for GREEN recovery…", "run");
+      const g = await waitFor(s => s.state === "GREEN", 15000, "GREEN");
+      li.textContent = `Recovered: GREEN seq=${g.seq}. Baseline untouched — chain proves order, baseline proves good.`;
+      li.className = "done";
+    } else {
+      let li = step("Armed: flipping memory limit → 999 (no file touched)…", "run");
+      $("attackMsg").textContent = await text("/tamper/memory?limit=999");
+      li.className = "done";
+      li = step("Waiting for heartbeat…", "run");
+      const red = await waitFor(s => s.state === "RED", 15000, "RED");
+      li.textContent = `Caught: ${red.verdict} comp=${red.component} — memory blame without file edit`;
+      li.className = "done";
+      li = step("Clearing override…", "run");
+      $("attackMsg").textContent = await text("/tamper/memory/clear");
+      li.className = "done";
+      li = step("Waiting for GREEN…", "run");
+      const g = await waitFor(s => s.state === "GREEN", 15000, "GREEN");
+      li.textContent = `Recovered: GREEN seq=${g.seq}.`;
+      li.className = "done";
+    }
+  } catch (e) {
+    step("Failed: " + e.message + " — is the engine running?", "fail");
+  }
+  btns.forEach(b => b.disabled = false);
+}
+$("bScenario").onclick = () => runScenario("config");
+$("bScenarioMem").onclick = () => runScenario("mem");
+
+// ---- toolbar ----
+$("bPause").onclick = () => {
+  paused = !paused;
+  $("bPause").textContent = paused ? "▶ resume" : "⏸ pause";
+};
+$("bSound").onclick = () => {
+  sound = !sound;
+  $("bSound").textContent = sound ? "🔔 sound" : "🔇 sound";
+};
+$("bExport").onclick = async () => {
+  try {
+    const h = await get("/api/history");
+    const blob = new Blob([JSON.stringify(h, null, 1)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "integrity-history.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) { $("attackMsg").textContent = "export failed: " + e; }
+};
+document.querySelectorAll(".chip.f").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".chip.f").forEach(x => x.classList.remove("on"));
+  b.classList.add("on");
+  filter = b.dataset.f;
+  renderHistory(lastHist);
+});
+
+async function loadBaseline() {
+  try {
+    const b = await get("/api/baseline");
+    $("baseLine").textContent =
+      `agent ${b.agentId} · seq ${b.seq} · hComb ${shortH(b.hComb)} · prev ${shortH(b.prevHash)} (full hashes: click Hash-compare values to copy)`;
+  } catch (e) { $("baseLine").textContent = "no baseline enrolled yet — run Enroll-Baseline"; }
+}
+
 async function tick() {
+  if (paused) return;
   try {
     const [s, h] = await Promise.all([get("/api/status"), get("/api/history")]);
     renderStatus(s); renderHistory(h);
-  } catch (e) { $("detail").textContent = "engine unreachable: " + e; }
+  } catch (e) { $("detail").textContent = "engine unreachable: " + e + " (start it: scripts/run.ps1)"; }
 }
 setClock(); setInterval(setClock, 1000);
+loadBaseline();
 tick(); setInterval(tick, 1000);

@@ -14,7 +14,12 @@
   </div>
   <div class="top-right">
     <div id="clock" class="clock">--:--:--</div>
-    <div id="chainBadge" class="badge">chain: …</div>
+    <div class="toolbar">
+      <button id="bPause" class="chip" title="pause/resume live polling">⏸ pause</button>
+      <button id="bSound" class="chip" title="beep on state change">🔇 sound</button>
+      <button id="bExport" class="chip" title="download history JSON">⤓ export</button>
+      <span id="chainBadge" class="badge">chain: …</span>
+    </div>
   </div>
 </header>
 
@@ -33,11 +38,12 @@
 
   <section class="grid">
     <div class="card">
-      <h2>Hash compare</h2>
-      <div class="hashrow"><span>baseline (golden)</span><code id="hBase">-</code><b id="mBase"></b></div>
-      <div class="hashrow"><span>observed (recomputed)</span><code id="hObs">-</code><b id="mObs"></b></div>
-      <div class="hashrow"><span>chain (reported)</span><code id="hChain">-</code><b id="mChain"></b></div>
-      <div class="hashrow"><span>prevHash (link)</span><code id="hPrev">-</code><b></b></div>
+      <h2>Hash compare <span class="dim">(click any hash to copy)</span></h2>
+      <div class="hashrow"><span>baseline (golden)</span><code id="hBase" data-copy="">-</code><b id="mBase"></b></div>
+      <div class="hashrow"><span>observed (recomputed)</span><code id="hObs" data-copy="">-</code><b id="mObs"></b></div>
+      <div class="hashrow"><span>chain (reported)</span><code id="hChain" data-copy="">-</code><b id="mChain"></b></div>
+      <div class="hashrow"><span>prevHash (link)</span><code id="hPrev" data-copy="">-</code><b></b></div>
+      <p class="hint" id="copyMsg"></p>
     </div>
     <div class="card">
       <h2>Demo attacks</h2>
@@ -53,19 +59,51 @@
     </div>
   </section>
 
+  <section class="card scenario">
+    <h2>▶ Guided attack scenario <span class="dim">(hands-free demo for judges)</span></h2>
+    <p class="hint">Runs: tamper config → wait 2 cycles → show RED → restore → show GREEN. Narrates each step.</p>
+    <div class="btns">
+      <button id="bScenario" class="primary">Run config-attack scenario</button>
+      <button id="bScenarioMem" class="primary">Run memory-attack scenario</button>
+    </div>
+    <ol id="scenarioSteps" class="steps"></ol>
+  </section>
+
   <section class="grid">
     <div class="card">
-      <h2>Pipeline latency <span class="dim">(ms per cycle)</span></h2>
+      <h2>Pipeline latency <span class="dim">(ms per cycle · dots = non-GREEN)</span></h2>
       <canvas id="chart" width="560" height="160"></canvas>
       <p class="hint" id="latencyNote">measure + verify per cycle · interval 5s · STALE after 12s</p>
     </div>
     <div class="card">
-      <h2>Cycle feed</h2>
+      <h2>Cycle feed <span class="dim">(click a row for full detail)</span></h2>
+      <div class="btns filters">
+        <button class="chip f on" data-f="ALL">all</button>
+        <button class="chip f" data-f="GREEN">green</button>
+        <button class="chip f" data-f="RED">red</button>
+        <button class="chip f" data-f="STALE">stale</button>
+      </div>
       <table id="feed">
         <thead><tr><th>seq</th><th>state</th><th>verdict</th><th>comp</th><th>meas</th><th>ver</th><th>ledger</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
+  </section>
+
+  <section class="card" id="drawer" hidden>
+    <h2>Cycle detail <span class="dim" id="dTitle"></span> <button id="dClose" class="chip">✕ close</button></h2>
+    <div class="hashrow"><span>verdict</span><code id="dVerdict">-</code><b></b></div>
+    <div class="hashrow"><span>expected</span><code id="dExp" data-copy="">-</code><b></b></div>
+    <div class="hashrow"><span>observed</span><code id="dObs" data-copy="">-</code><b></b></div>
+    <div class="hashrow"><span>chain</span><code id="dChain" data-copy="">-</code><b></b></div>
+    <div class="hashrow"><span>prevHash</span><code id="dPrev" data-copy="">-</code><b></b></div>
+    <div class="hashrow"><span>ledger</span><code id="dTx">-</code><b></b></div>
+    <p class="hint" id="dDetail"></p>
+  </section>
+
+  <section class="card">
+    <h2>Enrolled baseline <span class="dim">(golden, Phase 0)</span></h2>
+    <p class="hint" id="baseLine">loading…</p>
   </section>
 
   <footer>
