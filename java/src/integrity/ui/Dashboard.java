@@ -7,12 +7,13 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicReference;
 
-/** Tiny GREEN/RED page on :8080. JDK only, no deps. */
+/** Tiny GREEN/RED page on :8080. Shows WHICH component broke + seq/prevHash. JDK only. */
 public final class Dashboard {
-    public record Status(String state, String expected, String observed, String chain, String tx, String detail, long cycle) {}
+    public record Status(String state, long seq, String component, String expected, String observed,
+                         String chain, String prevHash, String tx, String detail, long cycle) {}
 
     private final AtomicReference<Status> cur = new AtomicReference<>(
-            new Status("STARTING", "-", "-", "-", "-", "boot", 0));
+            new Status("STARTING", 0, "-", "-", "-", "-", "-", "-", "boot", 0));
 
     public void update(Status s) { cur.set(s); }
 
@@ -24,12 +25,13 @@ public final class Dashboard {
             String html = "<html><body style='font-family:sans-serif;text-align:center'>"
                     + "<h1>Integrity Engine — agent-01</h1>"
                     + "<div style='font-size:64px;color:" + color + "'>" + s.state() + "</div>"
-                    + "<p>cycle " + s.cycle() + " | tx " + s.tx() + "</p>"
+                    + "<p>cycle " + s.cycle() + " | seq " + s.seq() + " | tx " + s.tx() + "</p>"
+                    + "<p><b>changed:</b> " + s.component() + "</p>"
                     + "<p><b>expected(baseline):</b> " + shortH(s.expected()) + "</p>"
                     + "<p><b>observed(recomputed):</b> " + shortH(s.observed()) + "</p>"
-                    + "<p><b>chain:</b> " + shortH(s.chain()) + "</p>"
+                    + "<p><b>chain:</b> " + shortH(s.chain()) + " | prev " + shortH(s.prevHash()) + "</p>"
                     + "<p>" + s.detail() + "</p>"
-                    + "<p>Chain proves timeline. Baseline proves goodness. Need both.</p>"
+                    + "<p>Signed: agentId|seq|ts|hBin|hCfg|hMem|hComb|prevHash. Chain=timeline. Baseline=goodness.</p>"
                     + "<meta http-equiv='refresh' content='2'></body></html>";
             byte[] b = html.getBytes(StandardCharsets.UTF_8);
             ex.getResponseHeaders().add("Content-Type", "text/html");
