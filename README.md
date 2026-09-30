@@ -57,14 +57,14 @@ Built with **pure JDK Java (no Maven downloads)**, **Solidity Integrity.sol**, a
 * **Golden Baseline Enrollment**
   Phase 0 runs once in a clean room. `Enroller.java` captures `H_bin0, H_cfg0, H_mem0, H_comb0` into `config/baseline.json`. That file is the Boss's trusted store, never overwritten from chain. Legit upgrades need a new admin-signed enrollment.
 
-* **Wax-Seal Signatures**
-  Payload `agentId|hComb|timestamp|nonce` is signed with Ed25519 (`java.security`, no libs). Private key stays with Checker, public key stays with Boss. Timestamp + monotonic nonce stops replay of yesterday's good measurement.
+* **Wax-Seal Signatures (frozen)**
+  Payload `agentId|seq|ts|hBin|hCfg|hMem|hComb|prevHash` is signed with Ed25519 (`java.security`, no libs). All three component hashes covered, so Boss can blame binary vs config vs memory. `hComb = SHA256(raw32||raw32||raw32)`. Timestamp + monotonic `seq` + `prevHash` chain stops replay/fork.
 
 * **Tamper-Evident Diary**
   `ChainAnchor.java` probes local chain (`eth_blockNumber` on `:8545`) and appends to `ledger.jsonl` always, so demo survives even if Anvil dies. Full contract call is `Integrity.sol.anchor()` with `enroll()` for genesis. Diary is append-only.
 
-* **Judge-Proof 4-Check Verifier**
-  `Verifier.java` loads baseline once (immutable) and passes GREEN only if all four hold: 1) seal valid, 2) `H_re == H_chain` (Checker honest), 3) `H == baseline` (state golden), 4) timestamp fresh + nonce monotonic. Anything else is RED with reason.
+* **Judge-Proof Verifier (per-component blame)**
+  `Verifier.java` loads golden `hBin/hCfg/hMem/hComb` once (immutable). GREEN only if: 1) `hComb==SHA256(raws)`, 2) full 8-field seal valid, 3) `prevHash` chains, 4) `H_re==reported` per-component (catches lying Checker as `MEASURE_MISMATCH_BIN/CFG/MEM`), 5) `reported==baseline` per-component (catches edit as `POLICY_BIN/CFG/MEM_CHANGED`), 6) `ts` fresh + `seq` monotonic.
 
 * **Live GREEN / RED Dashboard**
   JDK `HttpServer` on `:8080`, zero deps. Big status light, cycle count, tx hash, expected-baseline vs observed vs chain (truncated), detail line with timings. Auto-refreshes every 2s. This is what judges stare at.
