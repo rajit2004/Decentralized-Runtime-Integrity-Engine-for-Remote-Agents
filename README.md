@@ -10,7 +10,8 @@ One loop, every 5 seconds: **H-S-A-V — Hash, Sign, Anchor, Verify.**
 - **Worker (Agent):** dummy Java program + `config.json` + 2-3 critical memory values.
 - **Checker:** takes SHA-256 fingerprints of binary + config + canonical memory JSON.
 - **Diary (Blockchain):** anchors `hash + timestamp + signature` on local Anvil/Hardhat chain (`Integrity.sol`).
-- **Boss (Verifier + Dashboard):** re-computes, verifies Ed25519 seal, compares vs chain. GREEN = OK, RED = TAMPERED in <5s.
+- **Boss (Verifier + Dashboard):** independently re-measures, verifies Ed25519 seal, checks chain timeline, compares vs enrolled baseline. GREEN = OK, RED = TAMPERED in <5s.
+- **Baseline (Golden):** trusted hashes captured at enrollment (Phase 0) and stored with Boss. Chain proves *timeline*, baseline proves *what good is*.
 
 We detect tampering, we don't prevent it.
 
@@ -50,7 +51,18 @@ Logical commits only, no dumps. One feature = one commit:
 4. `feat(security): signer`
 5. etc.
 
+## Verification rule (judge-proof)
+Boss passes ONLY if all 4 hold:
+1. `sig valid?` with enrolled publicKey — proves origin
+2. `H_recomputed == H_onchain` — proves Checker honestly reported what it saw (catches lying Checker / MITM)
+3. `H_recomputed == H_baseline AND H_onchain == H_baseline` — proves state is still golden (catches file edit even when Checker honestly anchors new hash)
+4. `timestamp fresh + nonce monotonic` — stops replay
+
+If config edited: (2) passes but (3) fails -> RED `POLICY_MISMATCH expected <baseline> got <observed>`.
+If Checker lies (anchors old hash while files dirty): (3-chain) passes but (2) fails -> RED `MEASURE_MISMATCH`.
+Chain alone is not enough. Baseline alone is not enough. Need both.
+
 ## Judging fit
-- 35% demo: GREEN -> edit file live -> RED with tx hash
-- 25% depth: why chain>DB, nonce+timestamp anti-replay, whitelisted memory hashing
-- 20% understanding: threat model (attacker can write files, can't rewrite chain/steal privkey)
+- 35% demo: GREEN -> edit file live -> RED with expected-baseline vs observed + tx hash
+- 25% depth: why chain>DB (timeline), why baseline (goodness), nonce+timestamp anti-replay, whitelisted memory hashing
+- 20% understanding: threat model (attacker can write files, can't rewrite chain/steal privkey/rewrite baseline store)
