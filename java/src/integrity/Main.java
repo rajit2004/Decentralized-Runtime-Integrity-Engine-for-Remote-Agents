@@ -84,16 +84,17 @@ public final class Main {
         // Item 5: watchdog — 1s tick, STALE even when Checker dead / no requests.
         final long[] cycle = {0};
         final long[] seqBox = {seq};
-        final Dashboard.Status[] last = {new Dashboard.Status("STARTING", seq, "-", baseline.hComb(), "-", "-", "-", "-", "boot", 0)};
+        final Dashboard.Status[] last = {new Dashboard.Status("STARTING", seq, "-", "BOOT",
+                baseline.hComb(), "-", "-", "-", "-", "boot", 0, 0, 0, false)};
         Thread watchdog = new Thread(() -> {
             while (true) {
                 try {
                     Thread.sleep(1000);
                     long now = System.currentTimeMillis() / 1000;
                     if (verifier.isStale(now) && !"STALE".equals(last[0].state())) {
-                        Dashboard.Status st = new Dashboard.Status("STALE", seqBox[0], "-",
+                        Dashboard.Status st = new Dashboard.Status("STALE", seqBox[0], "-", "STALE",
                                 baseline.hComb(), "-", verifier.headHash(), verifier.headHash(),
-                                "-", "STALE: no fresh anchor for >" + STALE_SEC + "s (checker killed?) head=" + verifier.headHash(), cycle[0]);
+                                "-", "STALE: no fresh anchor for >" + STALE_SEC + "s (checker killed?) head=" + verifier.headHash(), cycle[0], 0, 0, false);
                         last[0] = st;
                         dash.update(st);
                         System.out.println("WATCHDOG STALE head=" + verifier.headHash());
@@ -124,11 +125,14 @@ public final class Main {
 
                 String state = v.ok() ? "GREEN" : "RED";
                 String component = Verifier.diffHint(v.reason()).getOrDefault("component", "-");
+                long measureMs = (t1 - t0) / 1_000_000;
+                long verifyMs = (t2 - t1) / 1_000_000;
                 String detail = v.reason() + " " + v.detail()
-                        + " | measure " + ((t1 - t0) / 1_000_000) + "ms verify " + ((t2 - t1) / 1_000_000) + "ms"
+                        + " | measure " + measureMs + "ms verify " + verifyMs + "ms"
                         + " chainUp=" + receipt.fromChain() + (receipt.fromChain() ? " chainTs=" + effectiveTs : "");
-                Dashboard.Status st = new Dashboard.Status(state, seq, component, baseline.hComb(), re.hComb(),
-                        m.hComb(), prevHash, receipt.ledgerRef(), detail, cycle[0]);
+                Dashboard.Status st = new Dashboard.Status(state, seq, component, v.reason().name(),
+                        baseline.hComb(), re.hComb(),
+                        m.hComb(), prevHash, receipt.ledgerRef(), detail, cycle[0], measureMs, verifyMs, receipt.fromChain());
                 last[0] = st;
                 dash.update(st);
                 System.out.println("cycle=" + cycle[0] + " seq=" + seq + " " + state + " " + v.reason()
@@ -140,9 +144,9 @@ public final class Main {
             } catch (Throwable t) {
                 // Item 17: never let the loop die silently.
                 System.out.println("CYCLE_ERR " + t);
-                Dashboard.Status st = new Dashboard.Status("RED", seq, "-",
+                Dashboard.Status st = new Dashboard.Status("RED", seq, "-", "CYCLE_ERR",
                         baseline.hComb(), "ERR", prevHash, prevHash, "-",
-                        "CYCLE_ERR: " + t + " (missing file counts as tamper)", cycle[0]);
+                        "CYCLE_ERR: " + t + " (missing file counts as tamper)", cycle[0], 0, 0, false);
                 last[0] = st;
                 dash.update(st);
                 try { Thread.sleep(1000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
