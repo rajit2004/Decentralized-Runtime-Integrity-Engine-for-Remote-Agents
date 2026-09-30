@@ -44,6 +44,7 @@ public final class Dashboard {
             else if (path.equals("/styles.css")) serveFile(ex, "styles.css", "text/css", false);
             else if (path.equals("/api/status")) serveJson(ex, statusJson(cur.get()));
             else if (path.equals("/api/history")) serveJson(ex, historyJson());
+            else if (path.equals("/api/baseline")) serveBaseline(ex);
             else if (path.equals("/api/tamper/config")) serveJson(ex, tamperConfig());
             else if (path.equals("/api/restore/config")) serveJson(ex, restoreConfig());
             else { byte[] b = "not found".getBytes(StandardCharsets.UTF_8); ex.sendResponseHeaders(404, b.length);
@@ -108,10 +109,23 @@ public final class Dashboard {
             sb.append("{\"seq\":").append(s.seq()).append(",\"cycle\":").append(s.cycle())
               .append(",\"state\":\"").append(s.state()).append("\",\"verdict\":\"").append(s.verdict())
               .append("\",\"component\":\"").append(s.component()).append("\",\"tx\":\"").append(esc(s.tx()))
+              .append("\",\"expected\":\"").append(s.expected()).append("\",\"observed\":\"").append(s.observed())
+              .append("\",\"chain\":\"").append(s.chain()).append("\",\"prevHash\":\"").append(s.prevHash())
+              .append("\",\"detail\":\"").append(esc(s.detail()))
               .append("\",\"measureMs\":").append(s.measureMs()).append(",\"verifyMs\":").append(s.verifyMs())
               .append(",\"chainUp\":").append(s.chainUp()).append("}");
         }
         return sb.append("]").toString();
+    }
+
+    private final Path baselinePath = Paths.get("config/baseline.json");
+
+    private void serveBaseline(HttpExchange ex) throws IOException {
+        try {
+            serveJson(ex, Files.readString(baselinePath));
+        } catch (Exception e) {
+            serveJson(ex, "{\"ok\":false,\"msg\":\"no baseline enrolled yet\"}");
+        }
     }
 
     // ---- one-click demo attacks (config file tamper + restore) ----
