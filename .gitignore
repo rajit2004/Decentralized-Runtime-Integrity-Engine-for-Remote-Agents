@@ -1,0 +1,32 @@
+# Java / Gradle / Maven / Node / Chain / IDE
+out/
+build/
+target/
+*.class
+*.jar
+!gradle-wrapper.jar
+.gradle/
+.mvn/
+node_modules/
+artifacts/
+cache/
+*.log
+ledger.jsonl
+history.csv
+
+# Keys - NEVER commit real private keys (demo keys only)
+*.key
+!demo-keys/.gitkeep
+
+# Local chain data
+anvil-data/
+hardhat-cache/
+.env
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/*
+!.idea/.gitignore
+*.iml
+.vscode/
