@@ -6,11 +6,12 @@ $cfg = Join-Path (Split-Path $PSScriptRoot -Parent) "config/agent-config.json"
 $bak = "$cfg.demo-bak"
 Copy-Item $cfg $bak -Force
 try {
-  (Get-Content $cfg) -replace '"threshold": 100', '"threshold": 999' | Set-Content $cfg
+  $c = [IO.File]::ReadAllText($cfg)
+  [IO.File]::WriteAllText($cfg, ($c -replace '"threshold": 100', '"threshold": 999'))
   Write-Host "Tampered. Watch :8080 flip RED POLICY_CFG_CHANGED comp=config within one 5s interval."
   Start-Sleep 8
 } finally {
   Copy-Item $bak $cfg -Force
   Remove-Item $bak -Force -ErrorAction SilentlyContinue
-  Write-Host "Restored. Re-enroll baseline if line endings changed: java -cp out integrity.enroll.Enroller ..."
+  Write-Host "Restored. Re-enroll only if source/config bytes changed: java -cp out integrity.enroll.Enroller ..."
 }

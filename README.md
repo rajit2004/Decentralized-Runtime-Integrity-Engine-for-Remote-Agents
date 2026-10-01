@@ -219,7 +219,9 @@ git clone https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-fo
 cd Decentralized-Runtime-Integrity-Engine-for-Remote-Agents
 ```
 
-### 2. Enroll Golden Baseline (trusted, once)
+A fresh clone boots **GREEN immediately**: the golden baseline is committed, `keys/` auto-generate on first run, and `.gitattributes` pins LF line endings for the hashed files so bytes match on every OS.
+
+### 2. Enroll Golden Baseline (only after changing source/config)
 
 ```powershell
 javac -d out (Get-ChildItem -Recurse java/src/*.java)
@@ -227,7 +229,7 @@ java -cp out integrity.enroll.Enroller "java/src/integrity/agent/AgentState.java
 # check config/baseline.json -> hComb golden
 ```
 
-Re-run this only for legit upgrades. Never auto-overwrite from chain.
+Re-run this only when you intentionally edited `AgentState.java` or `agent-config.json` (legit upgrades). Never auto-overwrite from chain.
 
 ### 3. Start Chain (optional but recommended)
 

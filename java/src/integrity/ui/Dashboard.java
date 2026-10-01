@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *   GET /api/status  -> latest Status as JSON
  *   GET /api/history -> last 60 cycles as JSON array
  *   GET /api/tamper/config   -> flip threshold 100->999 (demo attack)
- *   GET /api/restore/config  -> restore threshold (re-enroll if line endings shift)
+ *   GET /api/restore/config  -> restore threshold (re-enroll if source/config bytes changed)
  */
 public final class Dashboard {
     public record Status(String state, long seq, String component, String verdict,
@@ -147,7 +147,7 @@ public final class Dashboard {
         try {
             String c = Files.readString(cfgPath);
             Files.writeString(cfgPath, c.replace("\"threshold\": 999", "\"threshold\": 100"));
-            return "{\"ok\":true,\"msg\":\"config restored 999->100. If still RED, re-run Enroll-Baseline (line endings shift hashes).\"}";
+            return "{\"ok\":true,\"msg\":\"config restored 999->100. If still RED, source/config bytes changed - re-run Enroll-Baseline.\"}";
         } catch (Exception e) { return "{\"ok\":false,\"msg\":\"" + esc(e.toString()) + "\"}"; }
     }
 
