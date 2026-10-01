@@ -265,6 +265,11 @@ You should see GREEN flowing with cycle + tx.
 2. Next 5s cycle flips RED: `POLICY_CFG_CHANGED comp=config` (sustained, not one-off). Worst-case detection = 5s + 24ms pipeline; STALE after 12s if Checker killed.
 3. Restore to `100`, save. Back to GREEN next cycle. Memory variant: open `/tamper/memory?limit=999` -> `POLICY_MEM_CHANGED` without file edit.
 
+> **Byte-safety tips (demo insurance):**
+> * Easiest: use the dashboard's **Tamper/Restore buttons** — they edit only the value and never touch line endings.
+> * If editing manually, use an editor that preserves line endings (VS Code, IntelliJ, Windows 11 Notepad). A CRLF-rewriting editor changes the file's bytes even with `threshold` back at `100`, and the engine will **correctly** stay RED (proof: bytes *did* change).
+> * Stuck RED after a bad save? `git checkout -- config/agent-config.json` restores byte-identical bytes -> GREEN next cycle.
+
 Show judges `baseline.json` on screen before step 1 — that proves what good is. Volunteer limits first: compromised Checker can sign lies (TPM/TEE stretch), Boss re-read is demo-only, memory = whitelisted map.
 
 ---
