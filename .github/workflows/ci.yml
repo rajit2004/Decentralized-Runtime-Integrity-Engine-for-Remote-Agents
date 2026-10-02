@@ -1,0 +1,94 @@
+name: CI
+
+# Runs on every commit/PR. Gates: compile, Java 17 compatibility, SelfTest
+# attack table, dashboard JS syntax, LF portability, live smoke test
+# (fresh workspace boots GREEN, then tamper->RED->restore->GREEN), contract build.
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Compile (JDK only, no build tool)
+        run: javac -d out $(find java/src -name "*.java")
+
+      - name: Java 17 compatibility gate
+        run: javac --release 17 -d out17 $(find java/src -name "*.java")
+
+      - name: "SelfTest (41 checks - attack table, crypto vectors, Merkle, ABI)"
+        run: java -cp out integrity.test.SelfTest
+
+      - name: Dashboard JS syntax
+        run: node --check web/app.js
+
+      - name: Hashed files must stay LF (baseline portability gate)
+        run: |
+          set -e
+          out=$(git ls-files --eol java/src/integrity/agent/AgentState.java config/agent-config.json)
+          echo "$out"
+          count=$(printf '%s\n' "$out" | grep -c '^i/lf')
+          if [ "$count" != "2" ]; then echo "hashed file not LF in index"; exit 1; fi
+          grep -q 'eol=lf' .gitattributes || { echo ".gitattributes eol=lf pin missing"; exit 1; }
+
+      - name: Smoke test - fresh checkout boots GREEN
+        run: |
+          set -e
+          pkill -f integrity.Main || true
+          java -cp out integrity.Main > engine.log 2>&1 &
+          pid=$!
+          ok=0
+          for i in $(seq 1 25); do
+            sleep 1
+            if curl -sf http://localhost:8080/api/status | grep -q '"state":"GREEN"'; then
+              echo "GREEN after ${i}s"; ok=1; break
+            fi
+          done
+          if [ "$ok" != "1" ]; then echo "=== never GREEN ==="; cat engine.log; kill $pid || true; exit 1; fi
+          kill $pid || true
+          sleep 2
+
+      - name: Live verdict regression - tamper RED, restore GREEN
+        run: |
+          set -e
+          pkill -f integrity.Main || true
+          sleep 1
+          java -cp out integrity.Main > engine2.log 2>&1 &
+          pid=$!
+          trap 'kill $pid || true' EXIT
+          sleep 6
+          curl -sf http://localhost:8080/api/tamper/config
+          echo ""
+          status=""
+          for i in $(seq 1 12); do
+            sleep 1
+            status=$(curl -sf http://localhost:8080/api/status || true)
+            echo "poll $i: $status"
+            if printf '%s' "$status" | grep -q '"state":"RED"'; then break; fi
+          done
+          printf '%s' "$status" | grep -q '"state":"RED"' || { echo "tamper not caught"; exit 1; }
+          printf '%s' "$status" | grep -q 'POLICY_CFG_CHANGED' || { echo "wrong verdict"; exit 1; }
+          curl -sf http://localhost:8080/api/restore/config > /dev/null
+          status=""
+          for i in $(seq 1 12); do
+            sleep 1
+            status=$(curl -sf http://localhost:8080/api/status || true)
+            if printf '%s' "$status" | grep -q '"state":"GREEN"'; then break; fi
+          done
+          printf '%s' "$status" | grep -q '"state":"GREEN"' || { echo "restore did not recover"; exit 1; }
+          echo "verdict regression OK"
+
+      - name: Contract compiles
+        working-directory: contract
+        run: |
+          npm install --no-audit --no-fund
+          npx hardhat compile
