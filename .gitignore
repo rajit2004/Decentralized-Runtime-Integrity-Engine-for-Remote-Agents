@@ -23,6 +23,7 @@ keys/*.x509
 !demo-keys/.gitkeep
 # Runtime state (not golden)
 config/seq.dat
+config/chain.json
 ledger.jsonl
 
 # Local chain data
