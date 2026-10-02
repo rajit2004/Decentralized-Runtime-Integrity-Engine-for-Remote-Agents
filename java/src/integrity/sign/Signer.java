@@ -39,10 +39,16 @@ public final class Signer {
 
     public static boolean verify(PublicKey pub, String agentId, long seq, long ts,
                                  String hBin, String hCfg, String hMem,
-                                 String hComb, String prevHash, String sigB64) throws Exception {
-        Signature s = Signature.getInstance("Ed25519");
-        s.initVerify(pub);
-        s.update(payload(agentId, seq, ts, hBin, hCfg, hMem, hComb, prevHash).getBytes(StandardCharsets.UTF_8));
-        return s.verify(Base64.getDecoder().decode(sigB64));
+                                 String hComb, String prevHash, String sigB64) {
+        // Malformed base64/length must yield SIG_FAIL, never an exception that
+        // would crash the heartbeat into CYCLE_ERR (garbage in the wire = attack-shaped).
+        try {
+            Signature s = Signature.getInstance("Ed25519");
+            s.initVerify(pub);
+            s.update(payload(agentId, seq, ts, hBin, hCfg, hMem, hComb, prevHash).getBytes(StandardCharsets.UTF_8));
+            return s.verify(Base64.getDecoder().decode(sigB64));
+        } catch (Exception e) {
+            return false;
+        }
     }
 }
