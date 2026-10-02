@@ -61,7 +61,7 @@ Built with **pure JDK Java (no Maven downloads)**, **Solidity Integrity.sol**, a
   Payload `agentId|seq|ts|hBin|hCfg|hMem|hComb|prevHash` is signed with Ed25519 (`java.security`, no libs). All three component hashes covered, so Boss can blame binary vs config vs memory. `hComb = SHA256(raw32||raw32||raw32)`. Timestamp + monotonic `seq` + `prevHash` chain stops replay/fork.
 
 * **Tamper-Evident Diary (chain authoritative, file fallback)**
-  `ChainAnchor.java` probes local chain (`:8545`, `block.timestamp` authoritative) and appends to `ledger.jsonl` FALLBACK always so demo survives Anvil death. History lives in `Anchored` events (event log); mapping holds latest only. Ed25519 verified OFF-CHAIN by Boss (EVM has none). File ledger is tamper-evident, not tamper-proof — Verifier `headHash()` memory catches rewrites within a run.
+  `ChainAnchor.java` sends a real `anchor()` tx every cycle when `config/chain.json` + node are up (`ledgerRef` = tx hash, `block.timestamp` authoritative), and appends to `ledger.jsonl` FALLBACK always so demo survives Anvil death. History lives in `Anchored` events (event log); mapping holds latest only. Ed25519 verified OFF-CHAIN by Boss (EVM has none). File ledger is tamper-evident, not tamper-proof — Verifier `headHash()` memory catches rewrites within a run.
 
 * **Judge-Proof Verifier (per-component blame)**
   `Verifier.java` loads golden `hBin/hCfg/hMem/hComb` once (immutable). GREEN only if: 1) `hComb==SHA256(raws)`, 2) full 8-field seal valid, 3) `prevHash` chains, 4) `H_re==reported` per-component (catches lying Checker as `MEASURE_MISMATCH_BIN/CFG/MEM`), 5) `reported==baseline` per-component (catches edit as `POLICY_BIN/CFG/MEM_CHANGED`), 6) `ts` fresh + `seq` monotonic.
@@ -89,8 +89,8 @@ Built with **pure JDK Java (no Maven downloads)**, **Solidity Integrity.sol**, a
 * **No External Java Deps**
   Pure JDK 17+ (runs on 24). No Maven, Gradle, Spring, or web3j download needed for MVP. `javac` + `java` is enough. Perfect for hackathon wifi.
 
-* **Chain Fallback**
-  If `:8545` is down, engine keeps running on `ledger.jsonl` fallback and marks `chainUp=false`. You lose decentralization points but keep 35% demo marks.
+* **Real Chain Anchoring**
+  With `config/chain.json` (written by `npm run deploy`) and the node up, every heartbeat is a real `anchor()` transaction: `ledgerRef` = tx hash, chain `block.timestamp` authoritative (`chainUp=true`). If the node is down, engine keeps running on `ledger.jsonl` fallback and marks `chainUp=false`. You lose decentralization points but keep 35% demo marks.
 
 * **Stale / Replay Guard**
   Rejects timestamps older than 12s (chain `block.timestamp` authoritative when up) and reused/rewound `seq`. Attacker can't resend last week's good cover. `seq` persisted in `config/seq.dat` so restarts don't self-flag REPLAY.
@@ -153,7 +153,7 @@ Attack table for viva:
 | Memory flip via endpoint | RED POLICY_MEM_CHANGED comp=memory |
 | Lying Checker (anchor old) | RED MEASURE_MISMATCH_* comp=that component |
 | Replay / reorder | RED STALE_REPLAY (seq/ts/prevHash) |
-| Checker killed | STALE after 12s via 1s watchdog (headHash shown) |
+| Heartbeat stalled (locked/hung files) | RED CYCLE_ERR, then STALE after 12s via 1s watchdog (headHash shown). Demo: `scripts/demo-stale.ps1` |
 
 ---
 
@@ -180,10 +180,10 @@ Attack table for viva:
 ```text
 1.6/
 ├── contract/
-│   ├── Integrity.sol             # diary: enroll() + anchor() + events
+│   ├── contracts/Integrity.sol    # diary: enroll() + anchor() + events
 │   ├── hardhat.config.js
 │   ├── package.json
-│   └── scripts/deploy.js         # deploys to localhost:8545
+│   └── scripts/deploy.js         # deploys to localhost:8545, writes config/chain.json
 ├── java/src/integrity/
 │   ├── Main.java                 # heartbeat loop + wiring
 │   ├── measure/Measurer.java     # SHA-256 triple fingerprint
@@ -236,13 +236,13 @@ Re-run this only when you intentionally edited `AgentState.java` or `agent-confi
 ```bash
 cd contract
 npm install
-npx hardhat node
+npx hardhat node --port 8545
 # new terminal
-node scripts/deploy.js
-# save printed address into docs / config
+npm run deploy        # hardhat run scripts/deploy.js --network localhost
+# writes ../config/chain.json (rpcUrl, contractAddr, from, gas)
 ```
 
-If chain is down, engine still runs with `chainUp=false` + `ledger.jsonl`.
+Restart the engine after deploy — it reads `config/chain.json`, enrolls once on-chain (`anchorCount==0`), then every 5s heartbeat is a real `anchor()` tx. If chain is down, engine still runs with `chainUp=false` + `ledger.jsonl`.
 
 ### 4. Run Engine
 
@@ -262,7 +262,7 @@ You should see GREEN flowing with cycle + tx.
 ### 5. Tamper Live (the demo)
 
 1. Open `config/agent-config.json`, change `"threshold": 100` to `999`, save.
-2. Next 5s cycle flips RED: `POLICY_CFG_CHANGED comp=config` (sustained, not one-off). Worst-case detection = 5s + 24ms pipeline; STALE after 12s if Checker killed.
+2. Next 5s cycle flips RED: `POLICY_CFG_CHANGED comp=config` (sustained, not one-off). Worst-case detection = 5s + 24ms pipeline; heartbeat stall → CYCLE_ERR, STALE after 12s (`scripts/demo-stale.ps1`).
 3. Restore to `100`, save. Back to GREEN next cycle. Memory variant: open `/tamper/memory?limit=999` -> `POLICY_MEM_CHANGED` without file edit.
 
 > **Byte-safety tips (demo insurance):**

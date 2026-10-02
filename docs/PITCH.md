@@ -55,11 +55,12 @@
 
 > "Second flavor — no file touched. I flipped a value **inside the agent's memory**. Watch the verdict change: `POLICY_MEM_CHANGED`, component: memory. We tell you *where* it happened, not just *that* it happened."
 
-**Then kill the engine** (stop terminal) → STALE in 12s:
+**Then stall the heartbeat** (run `scripts/demo-stale.ps1` — locks the config file) → CYCLE_ERR, then STALE in 12s:
 
-> "Third flavor: silence. Kill the checker entirely — we don't keep showing a stale green light. Within 12 seconds the watchdog says STALE with the last known hash. Honest dashboards don't lie by omission."
+> "Third flavor: silence. The checker hangs and stops reporting. We don't keep showing a stale green light: first the exact cause as CYCLE_ERR, then within 12 seconds the watchdog says STALE with the last known hash. Honest dashboards don't lie by omission."
+> *(If someone kills the whole process instead, the page says 'engine unreachable' — also honest.)*
 
-*Restart engine → rejoins GREEN, sequence resumes where it left off.*
+*Lock releases → rejoins GREEN, sequence resumes where it left off.*
 
 > "It rejoins without replaying history — sequence persisted, chain linked. A reconnect can't forge the past."
 
@@ -107,7 +108,7 @@
 > "Because the attacker owns the machine. A Postgres row lives next to the config they edit. Our record is append-only and timestamped elsewhere — and the file fallback is labeled tamper-*evident*, not tamper-proof, because we're honest about that too."
 
 **Q: How fast is detection, really?**
-> "Measured over 20 trials: 4ms pipeline average, 24ms worst, inside a 5-second heartbeat. No flat '<5s' claim — interval plus pipeline, and STALE after 12 seconds if the checker dies."
+> "Measured over 20 trials: 4ms pipeline average, 24ms worst, inside a 5-second heartbeat. No flat '<5s' claim — interval plus pipeline, and STALE after 12 seconds of silence from the checker."
 
 **Q: What's fake in this demo?**
 > "Three things, said first: same-machine re-read, whitelisted memory instead of heap, and software keys instead of TPM. Everything else is real SHA-256, real Ed25519, real contract calls."

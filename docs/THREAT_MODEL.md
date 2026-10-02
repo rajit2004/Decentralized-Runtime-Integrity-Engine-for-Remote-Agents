@@ -18,7 +18,7 @@
    Labeled FALLBACK in dashboard + docs.
 
 ## What attacker CAN / CANNOT do
-CAN: write `config/`, flip memory via endpoint, kill Checker (STALE after 12s), replay old payloads (rejected by seq/ts/prevHash).
+CAN: write `config/`, flip memory via endpoint, hang/stall Checker (STALE after 12s via watchdog), replay old payloads (rejected by seq/ts/prevHash).
 CANNOT (assumed): steal `keys/` without trace, rewrite chain event log, rewrite Boss `baseline.json` store.
 
 ## Verification (off-chain — item 6)

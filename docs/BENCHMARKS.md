@@ -15,7 +15,7 @@ PIPELINE avg=4ms worst=24ms
 ```
 - Typical detection after file edit: **next cycle, ~5.0s + ~4ms**.
 - Worst observed: **5024ms** (5s interval + 24ms pipeline).
-- STALE (checker killed): watchdog 1s tick, dashboard STALE after **12s** with no fresh anchor.
+- STALE (heartbeat stalled, e.g. locked/hung files): watchdog 1s tick, dashboard STALE after **12s** with no fresh anchor. Demo: scripts/demo-stale.ps1.
 
 ## Merkle batch (scale fix)
 ```

@@ -2,7 +2,7 @@
 
 ## Roles (no one idle, integration frozen in first 20 min)
 - **Checker:** `Measurer`, `AgentState`, `Signer`, `KeyStore`, `Enroller`, `SeqStore`. Owns frozen payload + canonical hashing + key files.
-- **Ledger:** `ChainAnchor`, `contract/Integrity.sol`, `batch/*`, `scripts/redeploy`. Owns event log, Merkle batch, fallback file, redeploy script.
+- **Ledger:** `ChainAnchor`, `contract/contracts/Integrity.sol`, `batch/*`, `scripts/redeploy`. Owns event log, Merkle batch, fallback file, redeploy script.
 - **Verifier:** `Verifier`, `ui/Dashboard`, watchdog, verdict codes. Owns 4-family checks + STALE + per-component blame + UI.
 - **Tester:** `batch/Bench20`, `batch/BatchBench`, tamper scripts, `docs/BENCHMARKS.md`, PPT. Owns 20-trial numbers + demo script + trap checklist.
 
