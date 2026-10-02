@@ -144,9 +144,21 @@ public final class Main {
             } catch (Throwable t) {
                 // Item 17: never let the loop die silently.
                 System.out.println("CYCLE_ERR " + t);
-                Dashboard.Status st = new Dashboard.Status("RED", seq, "-", "CYCLE_ERR",
-                        baseline.hComb(), "ERR", prevHash, prevHash, "-",
-                        "CYCLE_ERR: " + t + " (missing file counts as tamper)", cycle[0], 0, 0, false);
+                // Stall semantics: first 12s of errors = RED CYCLE_ERR (cause shown);
+                // beyond the stale window the heartbeat is dead -> STALE (watchdog wins,
+                // no flicker between CYCLE_ERR and STALE).
+                Dashboard.Status st;
+                if (verifier.isStale(System.currentTimeMillis() / 1000)) {
+                    st = new Dashboard.Status("STALE", seq, "-", "STALE",
+                            baseline.hComb(), "-", verifier.headHash(), verifier.headHash(), "-",
+                            "STALE: heartbeat stalled >" + STALE_SEC + "s (cause: " + t + ") head=" + verifier.headHash(),
+                            cycle[0], 0, 0, false);
+                    System.out.println("WATCHDOG STALE (stalled loop) head=" + verifier.headHash());
+                } else {
+                    st = new Dashboard.Status("RED", seq, "-", "CYCLE_ERR",
+                            baseline.hComb(), "ERR", prevHash, prevHash, "-",
+                            "CYCLE_ERR: " + t + " (missing file counts as tamper)", cycle[0], 0, 0, false);
+                }
                 last[0] = st;
                 dash.update(st);
                 try { Thread.sleep(1000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
