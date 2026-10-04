@@ -42,10 +42,22 @@ public final class Signer {
                                  String hComb, String prevHash, String sigB64) {
         // Malformed base64/length must yield SIG_FAIL, never an exception that
         // would crash the heartbeat into CYCLE_ERR (garbage in the wire = attack-shaped).
+        return verifyPayload(pub, payload(agentId, seq, ts, hBin, hCfg, hMem, hComb, prevHash), sigB64);
+    }
+
+    /** Generic seal over any payload string (used by the boss witness, not the frozen agent contract). */
+    public String signPayload(String payload) throws Exception {
+        Signature s = Signature.getInstance("Ed25519");
+        s.initSign(priv);
+        s.update(payload.getBytes(StandardCharsets.UTF_8));
+        return Base64.getEncoder().encodeToString(s.sign());
+    }
+
+    public static boolean verifyPayload(PublicKey pub, String payload, String sigB64) {
         try {
             Signature s = Signature.getInstance("Ed25519");
             s.initVerify(pub);
-            s.update(payload(agentId, seq, ts, hBin, hCfg, hMem, hComb, prevHash).getBytes(StandardCharsets.UTF_8));
+            s.update(payload.getBytes(StandardCharsets.UTF_8));
             return s.verify(Base64.getDecoder().decode(sigB64));
         } catch (Exception e) {
             return false;

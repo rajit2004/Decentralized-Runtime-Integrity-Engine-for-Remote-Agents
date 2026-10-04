@@ -25,7 +25,12 @@ public final class KeyStore {
     }
 
     public static KeyStore defaults() {
-        return new KeyStore(Paths.get("keys/agent-private.pkcs8"), Paths.get("keys/agent-public.x509"));
+        return named("agent");
+    }
+
+    /** Named pair in keys/: e.g. named("witness") -> keys/witness-private.pkcs8 + keys/witness-public.x509 */
+    public static KeyStore named(String base) {
+        return new KeyStore(Paths.get("keys/" + base + "-private.pkcs8"), Paths.get("keys/" + base + "-public.x509"));
     }
 
     /** Load or create. Returns KeyPair. Writes files with best-effort locked perms. */

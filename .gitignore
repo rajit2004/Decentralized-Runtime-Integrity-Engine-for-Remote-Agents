@@ -25,6 +25,7 @@ keys/*.x509
 config/seq.dat
 config/chain.json
 ledger.jsonl
+witness.jsonl
 
 # Local chain data
 anvil-data/
