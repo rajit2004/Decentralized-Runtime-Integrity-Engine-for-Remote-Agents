@@ -1,4 +1,4 @@
-# Benchmarks — Item 4 (20 trials, laptop)
+# Benchmarks - Item 4 (20 trials, laptop)
 
 Frozen timing: **interval 5s, STALE if no fresh anchor after 12s.**
 Headline reworded: detection lands **within one 5s interval plus pipeline**,

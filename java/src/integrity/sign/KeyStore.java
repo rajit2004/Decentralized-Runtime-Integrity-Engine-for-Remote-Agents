@@ -51,11 +51,11 @@ public final class KeyStore {
                 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         lockdown(privPath);
         System.out.println("KEYS generated: priv=" + privPath + " (checker only), pub=" + pubPath + " (boss)");
-        System.out.println("ASSUMPTION: keys/ is outside the attacker-writable config/ dir. A reader with agent-box access can still read it — TPM/TEE is the real fix.");
+        System.out.println("ASSUMPTION: keys/ is outside the attacker-writable config/ dir. A reader with agent-box access can still read it - TPM/TEE is the real fix.");
         return kp;
     }
 
-    /** Best-effort owner-only perms (POSIX; no-op on Windows ACLs — documented). */
+    /** Best-effort owner-only perms (POSIX; no-op on Windows ACLs - documented). */
     private static void lockdown(Path p) {
         try {
             java.util.Set<java.nio.file.attribute.PosixFilePermission> perms =

@@ -1,4 +1,4 @@
-# Verification Logic — Frozen Shared Contract (v2)
+# Verification Logic - Frozen Shared Contract (v2)
 
 ## Frozen wire (first 20 min, no changes after)
 Signed payload (UTF-8, pipe-separated):
@@ -19,16 +19,16 @@ Fix: Boss compares vs enrolled golden baseline. Chain=timeline, baseline=goodnes
 
 ## Enrollment (Phase 0, trusted)
 1. Clean room: `hBin0,hCfg0,hMem0,hComb0` via `Enroller`.
-2. `config/baseline.json` = `{agentId,seq:0,ts,hBin,hCfg,hMem,hComb,prevHash:zeros}` — Boss trusted store, never overwritten from chain.
+2. `config/baseline.json` = `{agentId,seq:0,ts,hBin,hCfg,hMem,hComb,prevHash:zeros}` - Boss trusted store, never overwritten from chain.
 3. `Integrity.enroll()` pins genesis on chain.
 4. Checker gets privKey, Boss gets pubKey + baseline + contractAddr.
 
-## Steady check — Boss independent re-measure, then
+## Steady check - Boss independent re-measure, then
 1. `hComb == SHA256(raws)` both sides, else `COMB_MISMATCH`.
 2. `Verify(pub, full 8-field payload, sig)` else `SIG_FAIL`.
 3. `prevHash == expectedPrev` else `PREV_HASH_BREAK` (missing/forked cycle).
-4. Per-component `H_re vs reported`: `MEASURE_MISMATCH_BIN/CFG/MEM` (lying Checker — tells which).
-5. Per-component `reported vs baseline`: `POLICY_BIN_CHANGED/CFG_CHANGED/MEM_CHANGED` (honest report, dirty state — tells which).
+4. Per-component `H_re vs reported`: `MEASURE_MISMATCH_BIN/CFG/MEM` (lying Checker - tells which).
+5. Per-component `reported vs baseline`: `POLICY_BIN_CHANGED/CFG_CHANGED/MEM_CHANGED` (honest report, dirty state - tells which).
 6. `ts fresh + seq monotonic` else `STALE_REPLAY`.
 
 Chain cursor (`expectedPrev`, `lastSeq`) advances on OK **and** on POLICY_* so sustained tamper stays `POLICY_CFG_CHANGED` instead of flipping to `PREV_HASH_BREAK`. Dashboard shows `changed: binary|config|memory`.

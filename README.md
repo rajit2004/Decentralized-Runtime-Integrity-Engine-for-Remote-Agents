@@ -43,7 +43,7 @@
 
 **Decentralized Runtime Integrity Engine** is a verifiable integrity framework for remote agents built for Technorazz 2026, Track 1.6.
 
-Remote agents — AI bots, edge workers, enterprise daemons — run where you can't see them. An attacker with file access can patch the binary, edit `config.json`, or flip an in-memory limit. How do you know?
+Remote agents - AI bots, edge workers, enterprise daemons - run where you can't see them. An attacker with file access can patch the binary, edit `config.json`, or flip an in-memory limit. How do you know?
 
 We don't prevent the edit. We **prove it within one 5s interval plus ~4ms pipeline avg (~24ms worst, measured 20 trials). STALE if no fresh anchor after 12s.**
 
@@ -110,16 +110,16 @@ Why baseline **and** chain: chain alone can't tell "new honest measurement" from
   Every cycle hashes the agent binary file, `config/agent-config.json`, and whitelisted memory state (`mode, limit, version`). Uses `MessageDigest SHA-256`. One byte change flips the whole hash.
 
 * **Deterministic Memory Hashing**
-  We don't dump RAM — that's noisy. We serialize only critical variables via sorted `TreeMap` to `k=v;k=v` canonical form, then hash. Same state always gives same hash, no false positives.
+  We don't dump RAM - that's noisy. We serialize only critical variables via sorted `TreeMap` to `k=v;k=v` canonical form, then hash. Same state always gives same hash, no false positives.
 
 * **Golden Baseline Enrollment**
   Phase 0 runs once in a clean room. `Enroller.java` captures `H_bin0, H_cfg0, H_mem0, H_comb0` into `config/baseline.json`. That file is the Boss's trusted store, never overwritten from chain. Legit upgrades need a new admin-signed enrollment.
 
 * **Wax-Seal Signatures (frozen)**
-  Payload `agentId|seq|ts|hBin|hCfg|hMem|hComb|prevHash` is signed with Ed25519 (`java.security`, no libs). All three component hashes covered, so Boss can blame binary vs config vs memory. `hComb = SHA256(raw32||raw32||raw32)` — raw bytes, never hex-concat (SelfTest pins the difference). Timestamp + monotonic `seq` + `prevHash` chain stops replay/fork.
+  Payload `agentId|seq|ts|hBin|hCfg|hMem|hComb|prevHash` is signed with Ed25519 (`java.security`, no libs). All three component hashes covered, so Boss can blame binary vs config vs memory. `hComb = SHA256(raw32||raw32||raw32)` - raw bytes, never hex-concat (SelfTest pins the difference). Timestamp + monotonic `seq` + `prevHash` chain stops replay/fork.
 
 * **Real On-Chain Anchoring (chain authoritative, file fallback)**
-  `ChainAnchor.java` sends a real `anchor()` tx every cycle when `config/chain.json` + node are up (`ledgerRef` = tx hash, chain `block.timestamp` authoritative), and appends to `ledger.jsonl` FALLBACK always so the demo survives node death. History lives in `Anchored` events (event log); mapping holds latest only. Ed25519 verified OFF-CHAIN by Boss (EVM has none). File ledger is tamper-evident, not tamper-proof — Verifier `headHash()` memory catches rewrites within a run.
+  `ChainAnchor.java` sends a real `anchor()` tx every cycle when `config/chain.json` + node are up (`ledgerRef` = tx hash, chain `block.timestamp` authoritative), and appends to `ledger.jsonl` FALLBACK always so the demo survives node death. History lives in `Anchored` events (event log); mapping holds latest only. Ed25519 verified OFF-CHAIN by Boss (EVM has none). File ledger is tamper-evident, not tamper-proof - Verifier `headHash()` memory catches rewrites within a run.
 
 * **Judge-Proof Verifier (per-component blame)**
   `Verifier.java` loads golden `hBin/hCfg/hMem/hComb` once (immutable). GREEN only if: 1) `hComb==SHA256(raws)`, 2) full 8-field seal valid, 3) `prevHash` chains, 4) `H_re==reported` per-component (catches lying Checker as `MEASURE_MISMATCH_BIN/CFG/MEM`), 5) `reported==baseline` per-component (catches edit as `POLICY_BIN/CFG/MEM_CHANGED`), 6) `ts` fresh + `seq` monotonic.
@@ -131,13 +131,13 @@ Why baseline **and** chain: chain alone can't tell "new honest measurement" from
   Config: edit `config/agent-config.json` `100->999`, save. Next 5s cycle flips RED `POLICY_CFG_CHANGED comp=config`. Memory: open `/tamper/memory?limit=999` (no file edit) -> RED `POLICY_MEM_CHANGED`. Binary: main demo is config (JAR locked on Windows; test binary tamper on Linux/macOS or stopped agent). Restore -> GREEN. No restart.
 
 * **Lying-Checker Detection**
-  If Checker anchors old good hash while files dirty, Boss independent recompute (demo only — remote has signed measurement only) catches `MEASURE_MISMATCH_BIN/CFG/MEM` and names the component. Two measure calls per cycle.
+  If Checker anchors old good hash while files dirty, Boss independent recompute (demo only - remote has signed measurement only) catches `MEASURE_MISMATCH_BIN/CFG/MEM` and names the component. Two measure calls per cycle.
 
 * **Key Pinning + Witness Audit (anti key-theft software layer)**
   Enrollment pins the agent's public key into `baseline.json`; a swapped key pair fails as `KEY_MISMATCH` instead of self-verifying into GREEN (re-run Enroller to activate the pin). Every verdict is also counter-signed by a separate boss witness key into hash-chained `witness.jsonl`, so a stolen agent key can forge agent signatures but not the witness trail. What this closes in software: key swaps and post-hoc forgery evidence. What needs hardware: a live stolen key (TPM/TEE, see Open Limits).
 
 * **Keys Outside Writable Dir (stated assumption)**
-  Private key in `keys/` (locked perms where OS allows), NOT next to `config.json`. A box-reader can still steal it — TPM/TEE is the real fix (stretch). Stated openly, see `docs/THREAT_MODEL.md`.
+  Private key in `keys/` (locked perms where OS allows), NOT next to `config.json`. A box-reader can still steal it - TPM/TEE is the real fix (stretch). Stated openly, see `docs/THREAT_MODEL.md`.
 
 * **Metrics on Every Cycle (measured, not promised)**
   20 trials: pipeline avg 4ms (measure 0.6, sign 1.6, verify 2.0), worst 24ms. Detection = next 5s interval + pipeline. STALE after 12s via 1s watchdog. Batch: 10k-leaf root 93ms, 1 root/min = 0.0167 TPS vs naive 2000 TPS (120,000x). See `docs/BENCHMARKS.md`.
@@ -154,7 +154,7 @@ Why baseline **and** chain: chain alone can't tell "new honest measurement" from
   With `config/chain.json` (written by `npm run deploy`) and the node up, every heartbeat is a real `anchor()` transaction: `ledgerRef` = tx hash, chain `block.timestamp` authoritative (`chainUp=true`). If the node is down, engine keeps running on `ledger.jsonl` fallback and marks `chainUp=false`. You lose decentralization points but keep 35% demo marks.
 
 * **Stale / Replay Guard**
-  Rejects timestamps older than 12s (chain `block.timestamp` authoritative when up) and reused/rewound `seq`. Attacker can't resend last week's good cover. `seq` persisted in `config/seq.dat` so restarts don't self-flag REPLAY. A stalled heartbeat shows `CYCLE_ERR` with the cause first, then `STALE` after 12s (watchdog wins — no flicker).
+  Rejects timestamps older than 12s (chain `block.timestamp` authoritative when up) and reused/rewound `seq`. Attacker can't resend last week's good cover. `seq` persisted in `config/seq.dat` so restarts don't self-flag REPLAY. A stalled heartbeat shows `CYCLE_ERR` with the cause first, then `STALE` after 12s (watchdog wins - no flicker).
 
 * **Windows-Safe Paths**
   Hashes `AgentState.java` source + config instead of locked `.exe`. Avoids file-lock false REDs on Windows demo laptops.
@@ -172,14 +172,14 @@ Why baseline **and** chain: chain alone can't tell "new honest measurement" from
 ## How It Works
 
 ```text
-Phase 0 — Trusted Enrollment (once)
+Phase 0 - Trusted Enrollment (once)
   Clean room -> Enroller measures golden files
         |
         v
   config/baseline.json saved with Boss + genesis anchored
         |
         v
-Phase 1 — Heartbeat (every 5s forever)
+Phase 1 - Heartbeat (every 5s forever)
   Checker reads binary + config + memory
         |
         v
@@ -240,7 +240,7 @@ Attack table for viva:
 | **Chain** | Solidity 0.8.20 `Integrity.sol`, Hardhat local node (`:8545`) |
 | **Chain Client** | Java `HttpClient` raw JSON-RPC (HTTP/1.1, no web3j), pure-JDK Keccak-256 + manual ABI encoder; `hardhat-ethers` deploy script |
 | **Dashboard** | Java `HttpServer` on `:8080`, no framework + static `web/` UI |
-| **Canonicalization** | Manual `TreeMap` sorted `k=v;` — no Jackson (SORT_KEYS trap avoided by design) |
+| **Canonicalization** | Manual `TreeMap` sorted `k=v;` - no Jackson (SORT_KEYS trap avoided by design) |
 | **Config** | `config/agent-config.json`, `config/baseline.json` (golden), `config/seq.dat` (persisted cursor), `config/chain.json` (deploy output, gitignored) |
 | **Keys** | `keys/` outside writable `config/` (assumption stated; TPM/TEE real fix) |
 | **Batch** | `batch/MerkleTree` root/min + proofs (10k scale) |
@@ -301,7 +301,7 @@ Attack table for viva:
 ### Prerequisites
 
 * Java 17+ (`java -version`)
-* Node 18+ + npm (only for chain; optional — fallback demo works without it)
+* Node 18+ + npm (only for chain; optional - fallback demo works without it)
 * No Maven/Gradle needed
 
 ### 1. Clone
@@ -320,7 +320,7 @@ javac -d out (Get-ChildItem -Recurse java/src/*.java)
 java -cp out integrity.Main
 ```
 
-Open <http://localhost:8080> — you should see GREEN flowing with cycle + tx.
+Open <http://localhost:8080> - you should see GREEN flowing with cycle + tx.
 
 ### 3. Optional: real chain anchoring (recommended for judges)
 
@@ -333,7 +333,7 @@ npm run deploy        # hardhat run scripts/deploy.js --network localhost
 # writes ../config/chain.json (rpcUrl, contractAddr, from, gas)
 ```
 
-Restart the engine after deploy — it reads `config/chain.json`, enrolls once on-chain (`anchorCount==0`), then every 5s heartbeat is a real `anchor()` tx (`chainUp=true`, `ledgerRef` = tx hash). If chain is down, engine still runs with `chainUp=false` + `ledger.jsonl`.
+Restart the engine after deploy - it reads `config/chain.json`, enrolls once on-chain (`anchorCount==0`), then every 5s heartbeat is a real `anchor()` tx (`chainUp=true`, `ledgerRef` = tx hash). If chain is down, engine still runs with `chainUp=false` + `ledger.jsonl`.
 
 ### 4. Tamper Live (the demo)
 
@@ -342,11 +342,11 @@ Restart the engine after deploy — it reads `config/chain.json`, enrolls once o
 3. Restore to `100`, save. Back to GREEN next cycle. Memory variant: open `/tamper/memory?limit=999` -> `POLICY_MEM_CHANGED` without file edit.
 
 > **Byte-safety tips (demo insurance):**
-> * Easiest: use the dashboard's **Tamper/Restore buttons** — they edit only the value and never touch line endings.
+> * Easiest: use the dashboard's **Tamper/Restore buttons** - they edit only the value and never touch line endings.
 > * If editing manually, use an editor that preserves line endings (VS Code, IntelliJ, Windows 11 Notepad). A CRLF-rewriting editor changes the file's bytes even with `threshold` back at `100`, and the engine will **correctly** stay RED (proof: bytes *did* change).
 > * Stuck RED after a bad save? `git checkout -- config/agent-config.json` restores byte-identical bytes -> GREEN next cycle.
 
-Show judges `baseline.json` on screen before step 4 — that proves what good is. Volunteer limits first: compromised Checker can sign lies (TPM/TEE stretch), Boss re-read is demo-only, memory = whitelisted map.
+Show judges `baseline.json` on screen before step 4 - that proves what good is. Volunteer limits first: compromised Checker can sign lies (TPM/TEE stretch), Boss re-read is demo-only, memory = whitelisted map.
 
 ### Re-baseline (only when you intentionally changed source/config)
 
@@ -362,7 +362,7 @@ Never auto-overwrite the baseline from chain.
 
 ## Testing & CI
 
-### SelfTest — 54 checks, pure JDK, exit 1 on failure
+### SelfTest - 54 checks, pure JDK, exit 1 on failure
 
 ```powershell
 javac -d out (Get-ChildItem -Recurse java/src/*.java)
@@ -382,7 +382,7 @@ Covers:
 * ABI layout: selectors, string offsets, seq word, sig offset
 * `SeqStore` roundtrip and genesis default
 
-### CI — every push and PR (`.github/workflows/ci.yml`)
+### CI - every push and PR (`.github/workflows/ci.yml`)
 
 | Gate | Catches |
 |---|---|
@@ -401,21 +401,21 @@ Covers:
 
 All from `Verifier.java`:
 
-* `OK` — all checks pass, GREEN
-* `KEY_MISMATCH` — the signing key on disk is not the one pinned in `baseline.json` at enrollment (key-swap attack; component: key)
-* `SIG_FAIL` — full 8-field seal invalid (Boss verifies off-chain; EVM has no Ed25519). Malformed base64/length also lands here — verify never throws.
-* `MEASURE_MISMATCH_BIN/CFG/MEM` — Boss recompute vs reported diverge per-component (lying Checker/MITM)
-* `POLICY_BIN/CFG/MEM_CHANGED` — honest report but dirty vs golden baseline per-component
-* `COMB_MISMATCH` — `hComb != SHA256(raws)`
-* `PREV_HASH_BREAK` — missing/forked cycle (chain linkage)
-* `STALE_REPLAY` — old `block.timestamp`-checked time or reused `seq`
-* `CYCLE_ERR` — heartbeat exception (cause shown); promotes to `STALE` past the 12s window
+* `OK` - all checks pass, GREEN
+* `KEY_MISMATCH` - the signing key on disk is not the one pinned in `baseline.json` at enrollment (key-swap attack; component: key)
+* `SIG_FAIL` - full 8-field seal invalid (Boss verifies off-chain; EVM has no Ed25519). Malformed base64/length also lands here - verify never throws.
+* `MEASURE_MISMATCH_BIN/CFG/MEM` - Boss recompute vs reported diverge per-component (lying Checker/MITM)
+* `POLICY_BIN/CFG/MEM_CHANGED` - honest report but dirty vs golden baseline per-component
+* `COMB_MISMATCH` - `hComb != SHA256(raws)`
+* `PREV_HASH_BREAK` - missing/forked cycle (chain linkage)
+* `STALE_REPLAY` - old `block.timestamp`-checked time or reused `seq`
+* `CYCLE_ERR` - heartbeat exception (cause shown); promotes to `STALE` past the 12s window
 
 Contract API (`Integrity.sol`, owner-only, `block.timestamp` authoritative):
 
-* `enroll(agentId, hBin, hCfg, hMem, hComb)` — once, cycle 0 genesis, sets `ownerOf`
-* `anchor(agentId, seq, hBin, hCfg, hMem, hComb, prevHash, sig)` — heartbeat, `require(msg.sender==owner)`, `prevHash` linkage
-* `getLatest(agentId)` / `anchorCount(agentIdHash)` — reads
+* `enroll(agentId, hBin, hCfg, hMem, hComb)` - once, cycle 0 genesis, sets `ownerOf`
+* `anchor(agentId, seq, hBin, hCfg, hMem, hComb, prevHash, sig)` - heartbeat, `require(msg.sender==owner)`, `prevHash` linkage
+* `getLatest(agentId)` / `anchorCount(agentIdHash)` - reads
 * Events (history lives here; mapping holds latest only): `Enrolled(bytes32 indexed agentIdHash, ...)`, `Anchored(bytes32 indexed agentIdHash, ...)`
 
 ---
@@ -445,7 +445,7 @@ git commit -m "feat(verify): explain policy mismatch better"
 git push origin feat/amazing-check
 ```
 
-New commits only — no amend, no force-push. Never commit `keys/*.pkcs8`, `keys/*.x509`, or real `*.key` files. Demo keys generate once into ignored `keys/`.
+New commits only - no amend, no force-push. Never commit `keys/*.pkcs8`, `keys/*.x509`, or real `*.key` files. Demo keys generate once into ignored `keys/`.
 
 CI must pass before merge: every push runs compile + SelfTest + live smoke test (see [Testing & CI](#testing--ci)).
 
@@ -460,7 +460,7 @@ Distributed under the **MIT License**.
 ## Acknowledgements
 
 * **Hardhat** for the local chain + deploy tooling
-* **Java JDK** `MessageDigest`, `Ed25519`, `HttpClient`, `HttpServer` — zero-dep MVP
+* **Java JDK** `MessageDigest`, `Ed25519`, `HttpClient`, `HttpServer` - zero-dep MVP
 * **Technorazz 2026 Technorazz team** for Track 1.6 problem statement
 
 ---
@@ -468,7 +468,7 @@ Distributed under the **MIT License**.
 ## Author
 
 **Rajit + Team**
-Track 1.6 — Decentralized Runtime Integrity Engine for Remote Agents
+Track 1.6 - Decentralized Runtime Integrity Engine for Remote Agents
 
 [![GitHub](https://img.shields.io/badge/GitHub-rajit2004-black?style=flat&logo=github)](https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-for-Remote-Agents)
 
@@ -480,14 +480,14 @@ Track 1.6 — Decentralized Runtime Integrity Engine for Remote Agents
 
 1. `File -> Project Structure -> Project`: SDK must be JDK 24 (Add SDK -> JDK home `C:\Program Files\Java\jdk-24` if missing). Language level 24.
 2. `Modules -> 1.6 -> Sources`: `java/src` must be blue (Sources). If not, right-click -> Mark as Sources Root.
-3. `Build -> Rebuild Project`. Verify `out/production/1.6/integrity/Main.class` exists (terminal builds use `out/integrity/`, a different folder — both can coexist).
+3. `Build -> Rebuild Project`. Verify `out/production/1.6/integrity/Main.class` exists (terminal builds use `out/integrity/`, a different folder - both can coexist).
 4. Run config `Run-Engine`: "Use classpath of module: 1.6", Before Launch: Build.
 5. Re-run. Fallback that always works: `scripts/run.ps1` in a terminal (all live GREEN/RED tests ran that way).
 
 ## Open Limits (volunteer before judges ask)
 
-* **Software-only solution — state it first.** It proves tampering when the agent is honest or when we can re-measure, but a fully compromised agent with a stolen key can lie. Closing that gap needs hardware: TPM/TEE key sealing, remote attestation, and chip-signed measurements. What the software layer does close: key swaps (`KEY_MISMATCH` via the pin written at enrollment) and forgeable history (boss-signed, hash-chained `witness.jsonl` that a stolen agent key cannot rewrite).
-* Compromised Checker can sign false hashes with a *stolen* key — TPM/TEE is the stretch goal. In split deployments keep the witness key on the Boss host only; in this single-box demo both keys sit on the same machine (stated).
+* **Software-only solution - state it first.** It proves tampering when the agent is honest or when we can re-measure, but a fully compromised agent with a stolen key can lie. Closing that gap needs hardware: TPM/TEE key sealing, remote attestation, and chip-signed measurements. What the software layer does close: key swaps (`KEY_MISMATCH` via the pin written at enrollment) and forgeable history (boss-signed, hash-chained `witness.jsonl` that a stolen agent key cannot rewrite).
+* Compromised Checker can sign false hashes with a *stolen* key - TPM/TEE is the stretch goal. In split deployments keep the witness key on the Boss host only; in this single-box demo both keys sit on the same machine (stated).
 * Boss file re-read works because demo is one laptop; remote verifier uses signed measurement + baseline + chain only.
 * Memory = `AgentState{mode,limit,version}` whitelist, not heap (heap never stabilizes).
 * `ledger.jsonl` is FALLBACK tamper-evident; chain event log authoritative.

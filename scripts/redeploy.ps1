@@ -1,6 +1,6 @@
 # Redeploy after Anvil restart (chain wipes on restart). Run in order.
 # 1) npx hardhat node (terminal 1)  2) this script (terminal 2)  3) engine (terminal 3)
-# Build out/ once now and keep the cache — first Gradle/npm run needs wifi.
+# Build out/ once now and keep the cache - first Gradle/npm run needs wifi.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 Push-Location "$PSScriptRoot/../contract"

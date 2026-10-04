@@ -94,7 +94,7 @@ public final class Verifier {
                 pinned);
     }
 
-    /** Full check. re = Boss independent measurement (demo only — remote has signed measurement only), m = reported. */
+    /** Full check. re = Boss independent measurement (demo only - remote has signed measurement only), m = reported. */
     public Verdict check(Measurer.Measurement re, SignedMeasurement m) throws Exception {
         return check(re, m, m.ts(), false);
     }
@@ -139,7 +139,7 @@ public final class Verifier {
         if (first && !(m.prevHash().equalsIgnoreCase(expectedPrev) || m.prevHash().equalsIgnoreCase(Measurer.ZERO_HASH)))
             return new Verdict(Reason.PREV_HASH_BREAK, expectedPrev, m.prevHash(), "genesis prev must be baseline hComb or zeros");
 
-        // 4. Boss independent re-measure vs reported — tells WHICH component Checker misreported
+        // 4. Boss independent re-measure vs reported - tells WHICH component Checker misreported
         if (!re.hBin().equalsIgnoreCase(m.hBin()))
             return new Verdict(Reason.MEASURE_MISMATCH_BIN, m.hBin(), re.hBin(), "BINARY diverge: checker lied or MITM");
         if (!re.hCfg().equalsIgnoreCase(m.hCfg()))
@@ -147,7 +147,7 @@ public final class Verifier {
         if (!re.hMem().equalsIgnoreCase(m.hMem()))
             return new Verdict(Reason.MEASURE_MISMATCH_MEM, m.hMem(), re.hMem(), "MEMORY diverge: checker lied or MITM");
 
-        // 5. reported vs golden baseline — tells WHICH golden component broke.
+        // 5. reported vs golden baseline - tells WHICH golden component broke.
         // Chain linkage already verified, so advance chain cursor even on POLICY fail:
         // sustained tamper must stay POLICY_* (not flip to PREV_HASH_BREAK).
         if (!m.hBin().equalsIgnoreCase(base.hBin())) {

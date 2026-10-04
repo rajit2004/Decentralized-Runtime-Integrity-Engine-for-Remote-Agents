@@ -30,6 +30,6 @@ public final class Enroller {
         Files.writeString(Paths.get("config/baseline.json"), json);
         System.out.println("BASELINE_ENROLLED hComb=" + m.hComb());
         System.out.println("KEY PINNED " + KeyStore.pubB64(kp.getPublic()).substring(0, 16) + "... (key swap now fails as KEY_MISMATCH)");
-        System.out.println("Wrote config/baseline.json — copy this to Boss, never overwrite from chain.");
+        System.out.println("Wrote config/baseline.json - copy this to Boss, never overwrite from chain.");
     }
 }

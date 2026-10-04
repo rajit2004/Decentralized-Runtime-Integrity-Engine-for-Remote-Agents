@@ -33,7 +33,7 @@ public final class ChainAnchor {
     private String from;
     private long gas = 1_000_000;
     private boolean enrolled = false;
-    // Hardhat's node 400s Java's default HTTP/2 upgrade attempt — pin HTTP/1.1.
+    // Hardhat's node 400s Java's default HTTP/2 upgrade attempt - pin HTTP/1.1.
     private final HttpClient http = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(1)).build();

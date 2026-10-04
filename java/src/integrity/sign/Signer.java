@@ -5,7 +5,7 @@ import java.security.*;
 import java.util.Base64;
 
 /**
- * Frozen contract — wax seal over ALL component hashes plus chain linkage.
+ * Frozen contract - wax seal over ALL component hashes plus chain linkage.
  * Signed payload (UTF-8, pipe-separated):
  *   agentId|seq|ts|hBin|hCfg|hMem|hComb|prevHash
  * Private stays with Checker, public stays with Boss (enrolled Phase 0).

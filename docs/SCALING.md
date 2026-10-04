@@ -1,8 +1,8 @@
-# Scaling — Merkle Batching (must-fix flaw)
+# Scaling - Merkle Batching (must-fix flaw)
 
 ## Flaw
 Anchoring every 5s per device on-chain does not scale.
-10,000 devices = 10,000/5 = **~2,000 TPS** — far too many and far too costly on a public chain.
+10,000 devices = 10,000/5 = **~2,000 TPS** - far too many and far too costly on a public chain.
 
 ## Fix: batch (implemented)
 Collect all devices' `hComb` for a window, build one Merkle tree, anchor **only the root once per minute**.
