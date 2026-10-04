@@ -31,6 +31,7 @@ public final class Witness {
     private final PublicKey pub;
     private final Path file;
     private String prevLineHash = GENESIS;
+    private int lines = 0;
 
     public Witness() {
         this(Paths.get("witness.jsonl"));
@@ -50,12 +51,17 @@ public final class Witness {
 
     public PublicKey publicKey() { return pub; }
     public Path file() { return file; }
+    public int lineCount() { return lines; }
+    public String head() { return prevLineHash; }
 
     private void resumeTail() {
         try {
             if (!Files.exists(file)) return;
             List<String> lines = Files.readAllLines(file);
-            for (String l : lines) if (!l.isBlank()) prevLineHash = Measurer.sha256Hex(l.getBytes(StandardCharsets.UTF_8));
+            for (String l : lines) if (!l.isBlank()) {
+                prevLineHash = Measurer.sha256Hex(l.getBytes(StandardCharsets.UTF_8));
+                this.lines++;
+            }
         } catch (Exception ignored) { /* fresh chain start */ }
     }
 
@@ -76,6 +82,7 @@ public final class Witness {
                     + "\",\"prevLine\":\"" + prevLineHash + "\",\"sig\":\"" + sig + "\"}";
             Files.writeString(file, line + "\n", StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             prevLineHash = Measurer.sha256Hex(line.getBytes(StandardCharsets.UTF_8));
+            lines++;
             return true;
         } catch (Exception e) {
             System.out.println("WITNESS_ERR " + e);

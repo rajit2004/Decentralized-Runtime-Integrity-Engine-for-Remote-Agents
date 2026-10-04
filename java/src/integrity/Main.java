@@ -20,11 +20,11 @@ import java.security.KeyPair;
  * fresh anchor after 12s (STALE_TIMEOUT_SEC=12). Worst-case detection =
  * interval + pipeline (~0.3s local), reported from 20-trial benchmark.
  *
- * Item 17: every cycle wrapped in try/catch(Throwable) — loop never dies silently.
+ * Item 17: every cycle wrapped in try/catch(Throwable) - loop never dies silently.
  * Item 5: 1s watchdog flips dashboard to STALE even with zero requests.
  * Item 14: seq persisted in config/seq.dat.
  * Item 3: keys in keys/ (outside writable config/), see KeyStore.
- * Item 12: Boss re-read is "independent recompute, demo only" — remote has signed measurement only.
+ * Item 12: Boss re-read is "independent recompute, demo only" - remote has signed measurement only.
  */
 public final class Main {
     static final long INTERVAL_MS = 5000;
@@ -54,6 +54,11 @@ public final class Main {
         ChainAnchor anchor = new ChainAnchor("http://127.0.0.1:8545");
         SeqStore seqStore = new SeqStore(Paths.get("config/seq.dat"));
         Dashboard dash = new Dashboard();
+        // Audit boot check: whole witness chain must verify (fresh file = vacuously ok).
+        boolean[] witChainOk = { !Files.exists(witness.file()) || Witness.verify(witness.file(), witness.publicKey()) };
+        dash.setWitness(new Dashboard.WitnessInfo(true, witChainOk[0], witness.lineCount(), witness.head(), 0, "-"));
+        System.out.println("WITNESS chain=" + (witChainOk[0] ? "verified" : "BROKEN") + " entries=" + witness.lineCount()
+                + (witChainOk[0] ? "" : " - audit trail failed verification"));
         HttpServer http = dash.start(8080);
 
         // Item 13 demo endpoint: simulated memory attack without file edit.
@@ -87,7 +92,7 @@ public final class Main {
             }
         } catch (Exception ignored) {}
 
-        // Item 5: watchdog — 1s tick, STALE even when Checker dead / no requests.
+        // Item 5: watchdog - 1s tick, STALE even when Checker dead / no requests.
         final long[] cycle = {0};
         final long[] seqBox = {seq};
         final Dashboard.Status[] last = {new Dashboard.Status("STARTING", seq, "-", "BOOT",
@@ -135,6 +140,10 @@ public final class Main {
                 long verifyMs = (t2 - t1) / 1_000_000;
                 // Boss counter-attestation: own key, own file, hash-chained.
                 boolean witOk = witness.record(seq, ts, state, v.reason().name(), component, m.hComb(), prevHash);
+                // Full chain re-verify about once a minute (O(file), cheap) so the
+                // dashboard witness panel shows a live verification result, not a boot-time guess.
+                if (cycle[0] % 12 == 1) witChainOk[0] = Witness.verify(witness.file(), witness.publicKey());
+                dash.setWitness(new Dashboard.WitnessInfo(true, witChainOk[0], witness.lineCount(), witness.head(), seq, v.reason().name()));
                 String detail = v.reason() + " " + v.detail()
                         + " | measure " + measureMs + "ms verify " + verifyMs + "ms"
                         + " | witness=" + (witOk ? "ok" : "OFF")

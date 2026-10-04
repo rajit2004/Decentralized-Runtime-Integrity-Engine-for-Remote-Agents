@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Integrity Engine — agent-01</title>
+<title>Integrity Engine - agent-01</title>
 <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
 <header class="top">
   <div>
-    <h1>Integrity Engine <span class="dim">— agent-01 · Track 1.6</span></h1>
+    <h1>Integrity Engine <span class="dim">- agent-01 · Track 1.6</span></h1>
     <p class="sub">Signed <code>agentId|seq|ts|hBin|hCfg|hMem|hComb|prevHash</code> · chain = timeline · baseline = goodness</p>
   </div>
   <div class="top-right">
@@ -61,7 +61,7 @@
         <button id="bClearMem">Clear memory</button>
       </div>
       <p class="hint" id="attackMsg"></p>
-      <p class="hint">If still RED after restore, source/config bytes changed — re-run Enroll-Baseline.</p>
+      <p class="hint">If still RED after restore, source/config bytes changed - re-run Enroll-Baseline.</p>
     </div>
   </section>
 
@@ -110,7 +110,7 @@
   <section class="grid">
     <div class="card">
       <h2>Enrolled baseline <span class="dim">(golden, Phase 0)</span></h2>
-      <p class="hint" id="baseLine">loading…</p>
+      <p class="hint" id="baseLine">loading...</p>
     </div>
     <div class="card">
       <h2>Verdicts <span class="dim">(this session)</span></h2>
@@ -118,6 +118,14 @@
         <canvas id="donut" width="180" height="180"></canvas>
         <div id="donutLegend" class="legend"></div>
       </div>
+    </div>
+    <div class="card">
+      <h2>Witness audit <span class="dim">(boss counter-attestation)</span></h2>
+      <div class="hashrow"><span>chain</span><code id="witChain">-</code><b id="witChainMark"></b></div>
+      <div class="hashrow"><span>entries</span><code id="witLines">-</code><b></b></div>
+      <div class="hashrow"><span>head (sha256)</span><code id="witHead" data-copy="">-</code><b></b></div>
+      <div class="hashrow"><span>last entry</span><code id="witLast">-</code><b></b></div>
+      <p class="hint">witness.jsonl is signed with a separate boss key: a stolen agent key can sign messages, but cannot write or rewrite this chain.</p>
     </div>
   </section>
 

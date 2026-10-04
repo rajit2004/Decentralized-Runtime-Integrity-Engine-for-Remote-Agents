@@ -24,6 +24,14 @@ public final class Dashboard {
                          String tx, String detail, long cycle,
                          long measureMs, long verifyMs, boolean chainUp) {}
 
+    /** Witness panel data: boss counter-attestation status, refreshed each cycle. */
+    public record WitnessInfo(boolean enabled, boolean chainOk, long lines, String head,
+                              long lastSeq, String lastVerdict) {}
+
+    private volatile WitnessInfo wit = null;
+
+    public void setWitness(WitnessInfo w) { this.wit = w; }
+
     private final AtomicReference<Status> cur = new AtomicReference<>(
             new Status("STARTING", 0, "-", "-", "-", "-", "-", "-", "-", "boot", 0, 0, 0, false));
     private final Deque<Status> history = new ArrayDeque<>();
@@ -91,13 +99,21 @@ public final class Dashboard {
     }
 
     String statusJson(Status s) {
+        WitnessInfo w = wit;
+        String wj = "null";
+        if (w != null) {
+            wj = "{\"enabled\":" + w.enabled() + ",\"chainOk\":" + w.chainOk()
+                    + ",\"lines\":" + w.lines() + ",\"head\":\"" + esc(w.head()) + "\""
+                    + ",\"lastSeq\":" + w.lastSeq() + ",\"lastVerdict\":\"" + esc(w.lastVerdict()) + "\"}";
+        }
         return "{\"state\":\"" + s.state() + "\",\"seq\":" + s.seq() + ",\"cycle\":" + s.cycle()
                 + ",\"verdict\":\"" + s.verdict() + "\",\"component\":\"" + s.component() + "\""
                 + ",\"expected\":\"" + s.expected() + "\",\"observed\":\"" + s.observed() + "\""
                 + ",\"chain\":\"" + s.chain() + "\",\"prevHash\":\"" + s.prevHash() + "\""
                 + ",\"tx\":\"" + esc(s.tx()) + "\",\"detail\":\"" + esc(s.detail()) + "\""
                 + ",\"measureMs\":" + s.measureMs() + ",\"verifyMs\":" + s.verifyMs()
-                + ",\"chainUp\":" + s.chainUp() + ",\"now\":" + (System.currentTimeMillis() / 1000) + "}";
+                + ",\"chainUp\":" + s.chainUp() + ",\"witness\":" + wj
+                + ",\"now\":" + (System.currentTimeMillis() / 1000) + "}";
     }
 
     synchronized String historyJson() {

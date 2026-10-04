@@ -125,7 +125,7 @@ Why baseline **and** chain: chain alone can't tell "new honest measurement" from
   `Verifier.java` loads golden `hBin/hCfg/hMem/hComb` once (immutable). GREEN only if: 1) `hComb==SHA256(raws)`, 2) full 8-field seal valid, 3) `prevHash` chains, 4) `H_re==reported` per-component (catches lying Checker as `MEASURE_MISMATCH_BIN/CFG/MEM`), 5) `reported==baseline` per-component (catches edit as `POLICY_BIN/CFG/MEM_CHANGED`), 6) `ts` fresh + `seq` monotonic.
 
 * **Live GREEN / RED Dashboard**
-  JDK `HttpServer` on `:8080`, zero deps. Big status light, cycle count, tx hash, expected-baseline vs observed vs chain (truncated), detail line with timings, donut/timeline/presenter views. Auto-refreshes every 2s. This is what judges stare at.
+  JDK `HttpServer` on `:8080`, zero deps. Big status light, cycle count, tx hash, expected-baseline vs observed vs chain (truncated), detail line with timings, donut/timeline/presenter views, and a witness audit panel (live chain verification, entry count, head hash, last entry). Auto-refreshes every 2s. This is what judges stare at.
 
 * **Live Tamper Demo (3 flavors)**
   Config: edit `config/agent-config.json` `100->999`, save. Next 5s cycle flips RED `POLICY_CFG_CHANGED comp=config`. Memory: open `/tamper/memory?limit=999` (no file edit) -> RED `POLICY_MEM_CHANGED`. Binary: main demo is config (JAR locked on Windows; test binary tamper on Linux/macOS or stopped agent). Restore -> GREEN. No restart.

@@ -57,6 +57,24 @@ function renderStatus(s) {
   setHash("hPrev", null, s.prevHash, true, true);
   $("latencyNote").textContent =
     `measure ${s.measureMs}ms · verify ${s.verifyMs}ms · interval 5s · STALE after 12s`;
+  renderWitness(s.witness);
+}
+
+function renderWitness(w) {
+  const c = $("witChain");
+  if (!c) return;
+  const m = $("witChainMark"), l = $("witLines"), h = $("witHead"), last = $("witLast");
+  if (!w || !w.enabled) {
+    c.textContent = "off"; m.textContent = "";
+    l.textContent = "-"; h.textContent = "-"; last.textContent = "-";
+    return;
+  }
+  c.textContent = w.chainOk ? "verified" : "BROKEN";
+  m.textContent = w.chainOk ? "✓" : "✗";
+  m.className = w.chainOk ? "ok" : "bad";
+  l.textContent = w.lines;
+  setHash("witHead", null, w.head, w.chainOk);
+  last.textContent = "seq " + w.lastSeq + " · " + w.lastVerdict;
 }
 
 function setHash(codeId, markId, full, ok, neutral) {
@@ -173,7 +191,7 @@ function openDrawer(seq) {
   if (!c) return;
   document.querySelectorAll("#feed tr").forEach(tr => tr.classList.toggle("sel", tr.dataset.seq === String(seq)));
   $("drawer").hidden = false;
-  $("dTitle").textContent = `— seq ${c.seq} · cycle ${c.cycle} · ${c.state}`;
+  $("dTitle").textContent = `- seq ${c.seq} · cycle ${c.cycle} · ${c.state}`;
   $("dVerdict").textContent = c.verdict + " / " + c.component;
   setHash("dExp", null, c.expected, true, true);
   setHash("dObs", null, c.observed, true, true);
@@ -206,8 +224,8 @@ function drawChart(h) {
   line(c => c.measureMs, "#38bdf8");
   line(c => c.verifyMs, "#a78bfa");
   ctx.fillStyle = "#8ea0c2"; ctx.font = "11px sans-serif";
-  ctx.fillText("— measure", 8, 14); ctx.fillStyle = "#38bdf8"; ctx.fillRect(70, 6, 14, 3);
-  ctx.fillStyle = "#8ea0c2"; ctx.fillText("— verify", 92, 14); ctx.fillStyle = "#a78bfa"; ctx.fillRect(150, 6, 14, 3);
+  ctx.fillText("- measure", 8, 14); ctx.fillStyle = "#38bdf8"; ctx.fillRect(70, 6, 14, 3);
+  ctx.fillStyle = "#8ea0c2"; ctx.fillText("- verify", 92, 14); ctx.fillStyle = "#a78bfa"; ctx.fillRect(150, 6, 14, 3);
   h.forEach((c, i) => {
     if (c.state !== "GREEN") {
       const x = (i / Math.max(1, h.length - 1)) * (W - 8) + 4;
@@ -277,7 +295,7 @@ async function runScenario(kind) {
       li.className = "done";
       li = step("Waiting for GREEN recovery…", "run");
       const g = await waitFor(s => s.state === "GREEN", 15000, "GREEN");
-      li.textContent = `Recovered: GREEN seq=${g.seq}. Baseline untouched — chain proves order, baseline proves good.`;
+      li.textContent = `Recovered: GREEN seq=${g.seq}. Baseline untouched - chain proves order, baseline proves good.`;
       li.className = "done";
     } else {
       let li = step("Armed: flipping memory limit → 999 (no file touched)…", "run");
@@ -285,7 +303,7 @@ async function runScenario(kind) {
       li.className = "done";
       li = step("Waiting for heartbeat…", "run");
       const red = await waitFor(s => s.state === "RED", 15000, "RED");
-      li.textContent = `Caught: ${red.verdict} comp=${red.component} — memory blame without file edit`;
+      li.textContent = `Caught: ${red.verdict} comp=${red.component} - memory blame without file edit`;
       li.className = "done";
       li = step("Clearing override…", "run");
       $("attackMsg").textContent = await text("/tamper/memory/clear");
@@ -296,7 +314,7 @@ async function runScenario(kind) {
       li.className = "done";
     }
   } catch (e) {
-    step("Failed: " + e.message + " — is the engine running?", "fail");
+    step("Failed: " + e.message + " - is the engine running?", "fail");
   }
   btns.forEach(b => b.disabled = false);
 }
@@ -349,7 +367,7 @@ async function loadBaseline() {
     const b = await get("/api/baseline");
     $("baseLine").textContent =
       `agent ${b.agentId} · seq ${b.seq} · hComb ${shortH(b.hComb)} · prev ${shortH(b.prevHash)} (full hashes: click Hash-compare values to copy)`;
-  } catch (e) { $("baseLine").textContent = "no baseline enrolled yet — run Enroll-Baseline"; }
+  } catch (e) { $("baseLine").textContent = "no baseline enrolled yet - run Enroll-Baseline"; }
 }
 
 async function tick() {
