@@ -41,6 +41,8 @@ public final class SelfTest {
         rawBytesRule();
         attackTable();
         sustainedTamperStaysPolicy();
+        keyPinning();
+        witnessChain();
         merkleScale();
         abiEncoding();
         seqPersistence();
@@ -125,7 +127,7 @@ public final class SelfTest {
         Files.writeString(cfg, "{\n  \"threshold\": 100\n}\n");
 
         Measurer.Measurement golden = Measurer.measure(bin, cfg, STATE);
-        baseline = new Verifier.Baseline(AGENT, golden.hBin(), golden.hCfg(), golden.hMem(), golden.hComb());
+        baseline = new Verifier.Baseline(AGENT, golden.hBin(), golden.hCfg(), golden.hMem(), golden.hComb(), "");
         kp = KeyStore.defaults().loadOrCreate();
         signer = new Signer(kp.getPrivate());
 
@@ -261,6 +263,63 @@ public final class SelfTest {
         } finally {
             Files.writeString(cfg, orig);
         }
+    }
+
+    // ---- key pinning: a swapped key pair must not self-verify into GREEN ----
+
+    static void keyPinning() throws Exception {
+        System.out.println("[key pinning]");
+        long now = System.currentTimeMillis() / 1000;
+
+        // baseline parsing: with and without a pinned key
+        Path tmp = Files.createTempFile("integrity-baseline", ".json");
+        Files.writeString(tmp, "{\"agentId\":\"" + AGENT + "\",\"hBin\":\"" + h64(1) + "\",\"hCfg\":\"" + h64(2)
+                + "\",\"hMem\":\"" + h64(3) + "\",\"hComb\":\"" + h64(4) + "\",\"prevHash\":\"" + h64(5)
+                + "\",\"publicKey\":\"QUJDREVGR0g=\"}");
+        check("baseline parses pinned public key", Verifier.loadBaseline(tmp).publicKey().equals("QUJDREVGR0g="));
+        Files.writeString(tmp, "{\"agentId\":\"" + AGENT + "\",\"hBin\":\"" + h64(1) + "\",\"hCfg\":\"" + h64(2)
+                + "\",\"hMem\":\"" + h64(3) + "\",\"hComb\":\"" + h64(4) + "\",\"prevHash\":\"" + h64(5) + "\"}");
+        check("legacy baseline stays unpinned (fresh-clone friendly)", Verifier.loadBaseline(tmp).publicKey().isEmpty());
+
+        // key swap: verifier holds the ATTACKER key, baseline pins the ENROLLED key
+        String pin = KeyStore.pubB64(kp.getPublic());
+        var pinned = new Verifier.Baseline(AGENT, baseline.hBin(), baseline.hCfg(), baseline.hMem(), baseline.hComb(), pin);
+        var attacker = Signer.generate();
+        var vSwap = new Verifier(AGENT, attacker.getPublic(), pinned, 12);
+        var m = signed(Measurer.measure(bin, cfg, STATE), 1, now, baseline.hComb());
+        var verdict = vSwap.check(Measurer.measure(bin, cfg, STATE), m, now, false);
+        check("key swap -> KEY_MISMATCH", verdict.reason() == Verifier.Reason.KEY_MISMATCH);
+        check("  names component key", "key".equals(component(verdict.reason())));
+        check("  reports enrolled vs disk key", verdict.expected().equals(pin));
+
+        // pin present + key matches -> normal GREEN path
+        var vOk = new Verifier(AGENT, kp.getPublic(), pinned, 12);
+        check("pinned + matching key -> OK", vOk.check(Measurer.measure(bin, cfg, STATE), m, now, false).reason() == Verifier.Reason.OK);
+
+        // unpinned baseline still verifies (demo default)
+        check("unpinned baseline -> OK", fresh().check(Measurer.measure(bin, cfg, STATE), m, now, false).reason() == Verifier.Reason.OK);
+    }
+
+    // ---- boss witness: independent, hash-chained counter-attestation ----
+
+    static void witnessChain() throws Exception {
+        System.out.println("[witness]");
+        Path witFile = Files.createTempDirectory("integrity-witness").resolve("witness.jsonl");
+        var w = new integrity.witness.Witness(witFile);
+        long now = System.currentTimeMillis() / 1000;
+        check("record 3 observations", w.record(1, now, "GREEN", "OK", "-", h64(1), h64(2))
+                && w.record(2, now, "RED", "POLICY_CFG_CHANGED", "config", h64(3), h64(1))
+                && w.record(3, now, "GREEN", "OK", "-", h64(4), h64(3)));
+        check("3-line chain verifies", integrity.witness.Witness.verify(witFile, w.publicKey()));
+
+        String orig = Files.readString(witFile);
+        Files.writeString(witFile, orig.replace(h64(3), h64(9)));
+        check("edited line breaks the chain", !integrity.witness.Witness.verify(witFile, w.publicKey()));
+        Files.writeString(witFile, orig);
+        check("restored chain verifies again", integrity.witness.Witness.verify(witFile, w.publicKey()));
+        check("wrong boss key rejected", !integrity.witness.Witness.verify(witFile, Signer.generate().getPublic()));
+        check("well-formed 64-byte sig", integrity.witness.Witness.wellFormedSig(
+                Verifier.get(Files.readAllLines(witFile).get(0), "sig")));
     }
 
     static Verifier fresh() {

@@ -10,6 +10,7 @@ import integrity.sign.KeyStore;
 import integrity.sign.Signer;
 import integrity.ui.Dashboard;
 import integrity.verify.Verifier;
+import integrity.witness.Witness;
 import com.sun.net.httpserver.HttpServer;
 import java.nio.file.*;
 import java.security.KeyPair;
@@ -41,10 +42,15 @@ public final class Main {
         }
         Verifier.Baseline baseline = Verifier.loadBaseline(base);
         System.out.println("BASELINE hComb=" + baseline.hComb());
+        if (baseline.publicKey().isEmpty())
+            System.out.println("KEY PIN: not pinned (demo mode, fresh-clone friendly). Run Enroller to pin the boss-trusted key and catch key swaps as KEY_MISMATCH.");
+        else
+            System.out.println("KEY PIN: pinned " + baseline.publicKey().substring(0, Math.min(16, baseline.publicKey().length())) + "... (key swap -> KEY_MISMATCH)");
 
         KeyPair kp = KeyStore.defaults().loadOrCreate();
         Signer signer = new Signer(kp.getPrivate());
         Verifier verifier = new Verifier(agentId, kp.getPublic(), baseline, STALE_SEC);
+        Witness witness = new Witness();
         ChainAnchor anchor = new ChainAnchor("http://127.0.0.1:8545");
         SeqStore seqStore = new SeqStore(Paths.get("config/seq.dat"));
         Dashboard dash = new Dashboard();
@@ -127,8 +133,11 @@ public final class Main {
                 String component = Verifier.diffHint(v.reason()).getOrDefault("component", "-");
                 long measureMs = (t1 - t0) / 1_000_000;
                 long verifyMs = (t2 - t1) / 1_000_000;
+                // Boss counter-attestation: own key, own file, hash-chained.
+                boolean witOk = witness.record(seq, ts, state, v.reason().name(), component, m.hComb(), prevHash);
                 String detail = v.reason() + " " + v.detail()
                         + " | measure " + measureMs + "ms verify " + verifyMs + "ms"
+                        + " | witness=" + (witOk ? "ok" : "OFF")
                         + " chainUp=" + receipt.fromChain() + (receipt.fromChain() ? " chainTs=" + effectiveTs : "");
                 Dashboard.Status st = new Dashboard.Status(state, seq, component, v.reason().name(),
                         baseline.hComb(), re.hComb(),

@@ -2,6 +2,7 @@ package integrity.verify;
 
 import integrity.measure.Measurer;
 import integrity.measure.SignedMeasurement;
+import integrity.sign.KeyStore;
 import integrity.sign.Signer;
 import java.nio.file.*;
 import java.security.PublicKey;
@@ -12,6 +13,7 @@ import java.util.Map;
  * Judge-proof verifier on frozen contract.
  * Loads full golden baseline (hBin/hCfg/hMem/hComb) once, immutable.
  * Boss independently re-measures, then:
+ *  0 key on disk == key pinned at enrollment (catches key-swap attacks)
  *  1 sig over agentId|seq|ts|hBin|hCfg|hMem|hComb|prevHash
  *  2 H_re components == reported components (catches lying Checker, tells WHICH changed)
  *  3 reported == baseline (tells which golden component broke)
@@ -20,6 +22,7 @@ import java.util.Map;
 public final class Verifier {
     public enum Reason {
         OK,
+        KEY_MISMATCH,
         SIG_FAIL, MEASURE_MISMATCH_BIN, MEASURE_MISMATCH_CFG, MEASURE_MISMATCH_MEM,
         POLICY_BIN_CHANGED, POLICY_CFG_CHANGED, POLICY_MEM_CHANGED,
         COMB_MISMATCH, PREV_HASH_BREAK, STALE_REPLAY
@@ -29,7 +32,7 @@ public final class Verifier {
         public boolean ok() { return reason == Reason.OK; }
     }
 
-    public record Baseline(String agentId, String hBin, String hCfg, String hMem, String hComb) {}
+    public record Baseline(String agentId, String hBin, String hCfg, String hMem, String hComb, String publicKey) {}
 
     private final String agentId;
     private final PublicKey pub;
@@ -63,23 +66,32 @@ public final class Verifier {
     public static String get(String json, String key) {
         String k = "\"" + key + "\"";
         int i = json.indexOf(k);
+        if (i < 0) return "";
         int c = json.indexOf(':', i);
-        int v1 = json.indexOf('"', c);
-        if (v1 < 0) { // numeric
-            int s = c + 1;
-            while (s < json.length() && (json.charAt(s) == ' ')) s++;
+        if (c < 0) return "";
+        int s = c + 1;
+        while (s < json.length() && json.charAt(s) == ' ') s++;
+        // Numeric values are unquoted in our JSON. The old "look for any quote
+        // after the colon" heuristic returned the NEXT key's name instead of the
+        // number whenever more quoted fields followed (broke seq resume + witness).
+        if (s < json.length() && (Character.isDigit(json.charAt(s)) || json.charAt(s) == '-')) {
             int e = s;
             while (e < json.length() && "-0123456789".indexOf(json.charAt(e)) >= 0) e++;
-            return json.substring(s, e).trim();
+            return json.substring(s, e);
         }
+        int v1 = json.indexOf('"', s);
+        if (v1 < 0) return "";
         int v2 = json.indexOf('"', v1 + 1);
+        if (v2 < 0) return "";
         return json.substring(v1 + 1, v2);
     }
 
     public static Baseline loadBaseline(Path p) throws Exception {
         String s = Files.readString(p);
+        String pinned = s.contains("\"publicKey\"") ? get(s, "publicKey") : "";
         return new Baseline(get(s, "agentId"), get(s, "hBin").toLowerCase(),
-                get(s, "hCfg").toLowerCase(), get(s, "hMem").toLowerCase(), get(s, "hComb").toLowerCase());
+                get(s, "hCfg").toLowerCase(), get(s, "hMem").toLowerCase(), get(s, "hComb").toLowerCase(),
+                pinned);
     }
 
     /** Full check. re = Boss independent measurement (demo only — remote has signed measurement only), m = reported. */
@@ -93,6 +105,15 @@ public final class Verifier {
      */
     public Verdict check(Measurer.Measurement re, SignedMeasurement m, long effectiveTs, boolean fromChain) throws Exception {
         long now = System.currentTimeMillis() / 1000;
+        // 0. Identity first: the key on disk must be the one enrolled at Phase 0.
+        // A swapped key pair would otherwise self-verify into GREEN. Pin lives in
+        // the Boss-trusted baseline, so the attacker must rewrite the baseline too.
+        if (!base.publicKey().isEmpty()) {
+            String diskB64 = KeyStore.pubB64(pub);
+            if (!diskB64.equals(base.publicKey()))
+                return new Verdict(Reason.KEY_MISMATCH, base.publicKey(), diskB64,
+                        "signing key replaced since enrollment (key-swap attack)");
+        }
         long refTs = fromChain ? effectiveTs : m.ts();
         if (Math.abs(now - refTs) > staleSec) return new Verdict(Reason.STALE_REPLAY, "fresh-ts", Long.toString(refTs), "stale timestamp (chain-authoritative=" + fromChain + ")");
         if (!first && m.seq() <= lastSeq) return new Verdict(Reason.STALE_REPLAY, "seq>" + lastSeq, "seq=" + m.seq(), "replay or reorder");
@@ -158,6 +179,7 @@ public final class Verifier {
             case POLICY_BIN_CHANGED, MEASURE_MISMATCH_BIN -> "binary";
             case POLICY_CFG_CHANGED, MEASURE_MISMATCH_CFG -> "config";
             case POLICY_MEM_CHANGED, MEASURE_MISMATCH_MEM -> "memory";
+            case KEY_MISMATCH -> "key";
             default -> "-";
         });
         return m;
