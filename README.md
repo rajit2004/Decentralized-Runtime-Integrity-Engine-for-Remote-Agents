@@ -26,7 +26,7 @@
 * [Quick Start](#quick-start)
 * [Testing & CI](#testing--ci)
 * [Verdict Codes](#verdict-codes)
-* [Open Limits](#open-limits-volunteer-before-judges-ask)
+* [Open Limits](#open-limits)
 * [Contributing](#contributing)
 * [Author](#author)
 
@@ -336,31 +336,33 @@ Contract API (`Integrity.sol`, owner-only, `block.timestamp` authoritative):
 
 ---
 
-## Open Limits (volunteer before judges ask)
+## Open Limits
 
-### Software-only solution - state it first
+An honest statement of what this system does and does not cover.
 
-It proves tampering when the agent is honest or when we can re-measure, but a fully compromised agent with a stolen key can lie. Closing that gap needs hardware: TPM/TEE key sealing, remote attestation, and chip-signed measurements.
+### Software-only by design
 
-**What the software layer does close:** key swaps (`KEY_MISMATCH` via the pin written at enrollment) and forgeable history (boss-signed, hash-chained `witness.jsonl` that a stolen agent key cannot rewrite).
+The engine proves tampering when the agent is honest or when we can re-measure, but a fully compromised agent with a stolen signing key can lie. Closing that gap requires hardware: TPM/TEE key sealing, remote attestation, and chip-signed measurements.
 
-**Compromised Checker:** can sign false hashes with a stolen key - TPM/TEE is the stretch goal. In split deployments keep the witness key on the Boss host only; in this single-box demo both keys sit on the same machine (stated).
+What the software layer does close: key swaps (`KEY_MISMATCH`, enforced by the public key pinned into `baseline.json` at enrollment) and forgeable history (boss-signed, hash-chained `witness.jsonl` that a stolen agent key cannot rewrite).
 
-### Demo simplifications (stated openly)
+A compromised Checker can sign false hashes with a stolen key; TPM/TEE is the path to closing that. In split deployments, keep the witness key on the Boss host only. This single-box demo keeps both keys on the same machine.
 
-* **Boss file re-read** works because the demo is one laptop; a remote verifier uses signed measurement + baseline + chain only.
-* **Memory** = `AgentState{mode,limit,version}` whitelist, not heap (heap never stabilizes).
-* **`ledger.jsonl`** is FALLBACK tamper-evident; chain event log authoritative.
+### Demo simplifications
+
+* **Boss file re-read** works because the demo runs on a single machine; a remote verifier would use only the signed measurement, baseline, and chain.
+* **Memory hashing** covers `AgentState{mode,limit,version}` (a whitelist), not the full heap, which never stabilizes across runs.
+* **`ledger.jsonl`** is a tamper-evident fallback; the chain event log is authoritative.
 
 ### Stack and demo scope
 
-* **JDK-only MVP** (`javac`/`java`, no Maven/Spring/Gradle/Javalin/web3j wrapper needed).
-* **Binary tamper** is secondary on Windows (JAR locked / classes dir); config + memory endpoint are the live demos.
-* **File reads** retry 200ms; missing file = tamper.
+* **JDK-only** (`javac`/`java`, no Maven/Spring/Gradle/Javalin/web3j wrapper required).
+* **Binary tamper** is secondary on Windows (locked JAR / classes directory); the config edit and memory endpoint are the live attack demos.
+* **File reads** retry for 200ms; a missing file counts as tamper.
 
-### Stretch (beyond the hackathon)
+### Stretch goals
 
-Split Checker and Boss onto separate hosts, key in TPM/HSM, baseline + public key in a Boss vault, real L2 or permissioned chain, Prometheus metrics, and full TPM/TEE attestation.
+Split the Checker and Boss onto separate hosts, hold keys in a TPM/HSM, keep the baseline and public key in a Boss-controlled vault, anchor to a real L2 or permissioned chain, add Prometheus metrics, and adopt full TPM/TEE attestation.
 
 ---
 
