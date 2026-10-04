@@ -4,6 +4,10 @@
 1. **Item 11 — Compromised Checker can sign lies.** Checker runs on the same box as Worker
    with the private key in `keys/` (outside writable `config/`, locked perms where OS allows).
    A root-level reader can still steal it. We say this first. Real fix = TPM/TEE attestation (stretch).
+   Software layer does what software can: enrolling pins the public key in `baseline.json`
+   (a *replacement* key pair fails as `KEY_MISMATCH` instead of self-verifying), and every
+   verdict is counter-signed into hash-chained `witness.jsonl` by a separate boss key, so a
+   stolen agent key cannot rewrite the audit trail. A live stolen key still wins; hardware needed.
 2. **Item 12 — Boss re-read is demo only.** One-laptop demo lets Boss independently re-read files.
    Real remote verifier has the signed measurement + baseline + chain only. Labeled
    "independent recompute, demo only" in code and dashboard.
@@ -18,8 +22,8 @@
    Labeled FALLBACK in dashboard + docs.
 
 ## What attacker CAN / CANNOT do
-CAN: write `config/`, flip memory via endpoint, hang/stall Checker (STALE after 12s via watchdog), replay old payloads (rejected by seq/ts/prevHash).
-CANNOT (assumed): steal `keys/` without trace, rewrite chain event log, rewrite Boss `baseline.json` store.
+CAN: write `config/`, flip memory via endpoint, hang/stall Checker (STALE after 12s via watchdog), replay old payloads (rejected by seq/ts/prevHash), READ `keys/` and sign live lies with a stolen key (hardware fix).
+CANNOT: swap in their own key pair undetected (`KEY_MISMATCH`, pin written at enrollment), forge or rewrite `witness.jsonl` lines (separate boss key + SHA-256 chain), rewrite chain event log, rewrite Boss `baseline.json` store.
 
 ## Verification (off-chain — item 6)
 Ed25519 verified by Boss off-chain (EVM has no native Ed25519). Contract stores + orders + timestamps.

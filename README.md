@@ -11,7 +11,7 @@
   <a href="#tech-stack"><img src="https://img.shields.io/badge/Tech_Stack-Java_JDK_Only-4FC3F7?style=flat-square" alt="Tech Stack" /></a>
   <a href="#project-structure"><img src="https://img.shields.io/badge/Structure-18_Java_Files-FFB74D?style=flat-square" alt="Structure" /></a>
   <a href="#quick-start"><img src="https://img.shields.io/badge/Quick_Start-5_Min-81C784?style=flat-square" alt="Quick Start" /></a>
-  <a href="#testing--ci"><img src="https://img.shields.io/badge/Tests-41_checks-AB47BC?style=flat-square" alt="Tests" /></a>
+  <a href="#testing--ci"><img src="https://img.shields.io/badge/Tests-54_checks-AB47BC?style=flat-square" alt="Tests" /></a>
 </p>
 
 <p align="center">
@@ -84,6 +84,7 @@ flowchart LR
   S -->|"always append"| LED[("ledger.jsonl<br/>FALLBACK")]
   SOL -. "block.timestamp authoritative" .-> V
   V --> D["Dashboard :8080<br/>GREEN / RED / STALE"]
+  V -->|"counter-signs every verdict"| W["Witness (boss key)<br/>witness.jsonl hash chain"]
 ```
 
 | Box | Job | File |
@@ -92,6 +93,7 @@ flowchart LR
 | **Signer** | Ed25519 wax seal over the 8-field payload | `sign/Signer.java` |
 | **Chain anchor** | Real `anchor()` tx every cycle, raw JSON-RPC (HTTP/1.1), Keccak + manual ABI in pure JDK | `chain/ChainAnchor.java`, `chain/Keccak.java`, `chain/Abi.java` |
 | **Verifier** | 6 independent checks, per-component blame | `verify/Verifier.java` |
+| **Witness** | Boss counter-attestation: own key, hash-chained `witness.jsonl` | `witness/Witness.java` |
 | **Baseline** | Golden `hComb` from Phase 0 enrollment, never overwritten from chain | `config/baseline.json` |
 | **Dashboard** | Status light + attack buttons, JDK `HttpServer` | `ui/Dashboard.java`, `web/` |
 | **Contract** | Diary: `enroll` once, `anchor` per cycle, history in events | `contract/contracts/Integrity.sol` |
@@ -130,6 +132,9 @@ Why baseline **and** chain: chain alone can't tell "new honest measurement" from
 
 * **Lying-Checker Detection**
   If Checker anchors old good hash while files dirty, Boss independent recompute (demo only — remote has signed measurement only) catches `MEASURE_MISMATCH_BIN/CFG/MEM` and names the component. Two measure calls per cycle.
+
+* **Key Pinning + Witness Audit (anti key-theft software layer)**
+  Enrollment pins the agent's public key into `baseline.json`; a swapped key pair fails as `KEY_MISMATCH` instead of self-verifying into GREEN (re-run Enroller to activate the pin). Every verdict is also counter-signed by a separate boss witness key into hash-chained `witness.jsonl`, so a stolen agent key can forge agent signatures but not the witness trail. What this closes in software: key swaps and post-hoc forgery evidence. What needs hardware: a live stolen key (TPM/TEE, see Open Limits).
 
 * **Keys Outside Writable Dir (stated assumption)**
   Private key in `keys/` (locked perms where OS allows), NOT next to `config.json`. A box-reader can still steal it — TPM/TEE is the real fix (stretch). Stated openly, see `docs/THREAT_MODEL.md`.
@@ -241,7 +246,7 @@ Attack table for viva:
 | **Batch** | `batch/MerkleTree` root/min + proofs (10k scale) |
 | **Fallback Ledger** | `ledger.jsonl` FALLBACK tamper-evident (headHash in memory), chain event log authoritative |
 | **Timing** | 5s interval, STALE after 12s, 1s watchdog; pipeline avg 4ms worst 24ms |
-| **CI** | GitHub Actions: compile, `--release 17`, 41-check SelfTest, LF gate, live smoke test, contract build |
+| **CI** | GitHub Actions: compile, `--release 17`, 54-check SelfTest, LF gate, live smoke test, contract build |
 
 ---
 
@@ -270,11 +275,12 @@ Attack table for viva:
 │   │   ├── ChainAnchor.java    # real anchor() txs + ledger.jsonl fallback
 │   │   ├── Keccak.java         # pure-JDK Keccak-256 (selectors vs ethers)
 │   │   └── Abi.java            # manual ABI encoder (enroll/anchor/reads)
-│   ├── verify/Verifier.java    # 6-check judge-proof verifier
+│   ├── verify/Verifier.java    # 6-check judge-proof verifier + key pin
+│   ├── witness/Witness.java    # boss counter-attestation, hash-chained
 │   ├── batch/                  # MerkleTree + fleet benchmarks
 │   ├── agent/AgentState.java   # dummy worker whitelisted state
 │   ├── ui/Dashboard.java       # GREEN/RED page + API :8080
-│   └── test/SelfTest.java      # 41-check regression suite
+│   └── test/SelfTest.java      # 54-check regression suite
 ├── config/
 │   ├── agent-config.json       # tamper target (edit live)
 │   └── baseline.json           # golden baseline, Boss trusted store
@@ -356,7 +362,7 @@ Never auto-overwrite the baseline from chain.
 
 ## Testing & CI
 
-### SelfTest — 41 checks, pure JDK, exit 1 on failure
+### SelfTest — 54 checks, pure JDK, exit 1 on failure
 
 ```powershell
 javac -d out (Get-ChildItem -Recurse java/src/*.java)
@@ -370,6 +376,8 @@ Covers:
 * Raw-bytes `hComb` rule (and that hex-concat is a *different* wrong value)
 * Full attack table: `OK`, `POLICY_BIN/CFG/MEM_CHANGED`, `MEASURE_MISMATCH_BIN/CFG/MEM`, `SIG_FAIL`, `COMB_MISMATCH`, `PREV_HASH_BREAK`, `STALE_REPLAY` (old ts + seq reuse)
 * Sustained-tamper regression (POLICY stays POLICY across cycles, recovery → OK)
+* Key pinning: key swap → `KEY_MISMATCH`, pin present + matching key → OK, legacy unpinned baseline still boots
+* Witness: 3-line chain verifies, edited line breaks the chain, wrong boss key rejected
 * Merkle 10k-leaf build under budget + proof verify/reject
 * ABI layout: selectors, string offsets, seq word, sig offset
 * `SeqStore` roundtrip and genesis default
@@ -380,7 +388,7 @@ Covers:
 |---|---|
 | `javac` full build | compile breakage |
 | `javac --release 17` | accidental Java 18+ APIs |
-| `SelfTest` (41 checks) | verifier/crypto/chain regressions |
+| `SelfTest` (54 checks) | verifier/crypto/chain regressions |
 | `node --check web/app.js` | dashboard JS syntax |
 | `git ls-files --eol` on the 2 hashed files | LF/CRLF baseline portability break |
 | Live smoke: boot → must reach GREEN | fresh-clone boot regression |
@@ -394,6 +402,7 @@ Covers:
 All from `Verifier.java`:
 
 * `OK` — all checks pass, GREEN
+* `KEY_MISMATCH` — the signing key on disk is not the one pinned in `baseline.json` at enrollment (key-swap attack; component: key)
 * `SIG_FAIL` — full 8-field seal invalid (Boss verifies off-chain; EVM has no Ed25519). Malformed base64/length also lands here — verify never throws.
 * `MEASURE_MISMATCH_BIN/CFG/MEM` — Boss recompute vs reported diverge per-component (lying Checker/MITM)
 * `POLICY_BIN/CFG/MEM_CHANGED` — honest report but dirty vs golden baseline per-component
@@ -477,7 +486,8 @@ Track 1.6 — Decentralized Runtime Integrity Engine for Remote Agents
 
 ## Open Limits (volunteer before judges ask)
 
-* Compromised Checker can sign false hashes — TPM/TEE is the stretch goal.
+* **Software-only solution — state it first.** It proves tampering when the agent is honest or when we can re-measure, but a fully compromised agent with a stolen key can lie. Closing that gap needs hardware: TPM/TEE key sealing, remote attestation, and chip-signed measurements. What the software layer does close: key swaps (`KEY_MISMATCH` via the pin written at enrollment) and forgeable history (boss-signed, hash-chained `witness.jsonl` that a stolen agent key cannot rewrite).
+* Compromised Checker can sign false hashes with a *stolen* key — TPM/TEE is the stretch goal. In split deployments keep the witness key on the Boss host only; in this single-box demo both keys sit on the same machine (stated).
 * Boss file re-read works because demo is one laptop; remote verifier uses signed measurement + baseline + chain only.
 * Memory = `AgentState{mode,limit,version}` whitelist, not heap (heap never stabilizes).
 * `ledger.jsonl` is FALLBACK tamper-evident; chain event log authoritative.
