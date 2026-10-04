@@ -6,6 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-for-Remote-Agents/actions/workflows/ci.yml"><img src="https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-for-Remote-Agents/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-for-Remote-Agents/wiki"><img src="https://img.shields.io/badge/wiki-pages-blue?style=flat-square" alt="Wiki" /></a>
   <a href="#testing--ci"><img src="https://img.shields.io/badge/Tests-54_checks-AB47BC?style=flat-square" alt="Tests" /></a>
   <img src="https://img.shields.io/badge/track-1.6_Cybersecurity-blue.svg?style=flat-square" alt="Track" />
   <img src="https://img.shields.io/badge/made_with-Java_17+-red?logo=openjdk&style=flat-square" alt="Java" />
