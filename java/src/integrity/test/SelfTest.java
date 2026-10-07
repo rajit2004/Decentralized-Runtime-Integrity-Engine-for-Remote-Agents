@@ -43,6 +43,7 @@ public final class SelfTest {
         attackTable();
         sustainedTamperStaysPolicy();
         cursorRecovery();
+        chainReadback();
         keyPinning();
         witnessChain();
         dashboardWitnessJson();
@@ -291,6 +292,31 @@ public final class SelfTest {
         var m3 = signed(good, 3, now + 10, m2.hComb());
         var r3 = v.check(good, m3, now + 10, false);
         check("linked report after mismatch -> OK (no PREV_HASH_BREAK)", r3.reason() == Verifier.Reason.OK);
+    }
+
+    // ---- chain readback: what the chain stores must equal what was submitted ----
+
+    static void chainReadback() throws Exception {
+        System.out.println("[chain readback]");
+        long now = System.currentTimeMillis() / 1000;
+        var golden = Measurer.measure(bin, cfg, STATE);
+        var m = signed(golden, 1, now, baseline.hComb());
+        byte[] sigBytes = Base64.getDecoder().decode(m.sig());
+
+        var v1 = fresh();
+        var right = new Abi.ChainRecord(m.hBin(), m.hCfg(), m.hMem(), m.hComb(), m.prevHash(), m.seq(), now, sigBytes);
+        check("matching chain record -> OK", v1.check(golden, m, now, true, right).reason() == Verifier.Reason.OK);
+
+        var v2 = fresh();
+        var wrong = new Abi.ChainRecord(golden.hBin(), h64(9), golden.hMem(), golden.hComb(),
+                baseline.hComb(), m.seq(), now, sigBytes);
+        var verdict = v2.check(golden, m, now, true, wrong);
+        check("CHAIN_MISMATCH", verdict.reason() == Verifier.Reason.CHAIN_MISMATCH);
+        check("  names component chain", "chain".equals(component(verdict.reason())));
+
+        var v3 = fresh();
+        check("readback unavailable degrades to no-readback",
+                v3.check(golden, m, now, true, null).reason() == Verifier.Reason.OK);
     }
 
     // ---- key pinning: a swapped key pair must not self-verify into GREEN ----

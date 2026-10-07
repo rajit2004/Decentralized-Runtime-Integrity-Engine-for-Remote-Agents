@@ -27,6 +27,7 @@ Fix: Boss compares vs enrolled golden baseline. Chain=timeline, baseline=goodnes
 1. `hComb == SHA256(raws)` both sides, else `COMB_MISMATCH`.
 2. `Verify(pub, full 8-field payload, sig)` else `SIG_FAIL`.
 3. `prevHash == expectedPrev` else `PREV_HASH_BREAK` (missing/forked cycle).
+3b. If anchored on-chain: `getLatest` readback equals submitted record, else `CHAIN_MISMATCH` (component: chain).
 4. Per-component `H_re vs reported`: `MEASURE_MISMATCH_BIN/CFG/MEM` (lying Checker - tells which).
 5. Per-component `reported vs baseline`: `POLICY_BIN_CHANGED/CFG_CHANGED/MEM_CHANGED` (honest report, dirty state - tells which).
 6. `ts fresh + seq monotonic` else `STALE_REPLAY`.

@@ -1,11 +1,14 @@
 package integrity.verify;
 
+import integrity.chain.Abi;
 import integrity.measure.Measurer;
 import integrity.measure.SignedMeasurement;
 import integrity.sign.KeyStore;
 import integrity.sign.Signer;
 import java.nio.file.*;
 import java.security.PublicKey;
+import java.util.Arrays;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -25,7 +28,7 @@ public final class Verifier {
         KEY_MISMATCH,
         SIG_FAIL, MEASURE_MISMATCH_BIN, MEASURE_MISMATCH_CFG, MEASURE_MISMATCH_MEM,
         POLICY_BIN_CHANGED, POLICY_CFG_CHANGED, POLICY_MEM_CHANGED,
-        COMB_MISMATCH, PREV_HASH_BREAK, STALE_REPLAY
+        COMB_MISMATCH, PREV_HASH_BREAK, STALE_REPLAY, CHAIN_MISMATCH
     }
 
     public record Verdict(Reason reason, String expected, String observed, String detail) {
@@ -96,14 +99,20 @@ public final class Verifier {
 
     /** Full check. re = Boss independent measurement (demo only - remote has signed measurement only), m = reported. */
     public Verdict check(Measurer.Measurement re, SignedMeasurement m) throws Exception {
-        return check(re, m, m.ts(), false);
+        return check(re, m, m.ts(), false, null);
+    }
+
+    public Verdict check(Measurer.Measurement re, SignedMeasurement m, long effectiveTs, boolean fromChain) throws Exception {
+        return check(re, m, effectiveTs, fromChain, null);
     }
 
     /**
      * Item 8: effectiveTs = chain block.timestamp when fromChain, else Checker ts.
      * A compromised Checker can lie about ts; chain time is authoritative.
+     * chainRec = on-chain getLatest readback of this submission (null = no readback).
      */
-    public Verdict check(Measurer.Measurement re, SignedMeasurement m, long effectiveTs, boolean fromChain) throws Exception {
+    public Verdict check(Measurer.Measurement re, SignedMeasurement m, long effectiveTs, boolean fromChain,
+                         Abi.ChainRecord chainRec) throws Exception {
         long now = System.currentTimeMillis() / 1000;
         // 0. Identity first: the key on disk must be the one enrolled at Phase 0.
         // A swapped key pair would otherwise self-verify into GREEN. Pin lives in
@@ -149,6 +158,14 @@ public final class Verifier {
         first = false;
         noteFresh(now, m.hComb());
 
+        // 3b. authoritative chain readback: what the chain STORED must equal what
+        // we submitted. Catches wrong-contract redirects, reorgs, decode/RPC lies.
+        if (fromChain && chainRec != null && !matchesChain(m, chainRec))
+            return new Verdict(Reason.CHAIN_MISMATCH,
+                    "seq=" + m.seq() + " hComb=" + m.hComb().substring(0, 16),
+                    "seq=" + chainRec.seq() + " hComb=" + chainRec.hComb().substring(0, 16),
+                    "on-chain record differs from submitted measurement");
+
         // 4. Boss independent re-measure vs reported - tells WHICH component Checker misreported
         if (!re.hBin().equalsIgnoreCase(m.hBin()))
             return new Verdict(Reason.MEASURE_MISMATCH_BIN, m.hBin(), re.hBin(), "BINARY diverge: checker lied or MITM");
@@ -168,6 +185,22 @@ public final class Verifier {
         return new Verdict(Reason.OK, base.hComb(), re.hComb(), "sig+measure+baseline+chain all pass seq=" + m.seq());
     }
 
+    /** Submitted measurement vs on-chain getLatest record (sig compared as raw bytes). */
+    public static boolean matchesChain(SignedMeasurement m, Abi.ChainRecord c) {
+        if (c == null) return false;
+        try {
+            return m.seq() == c.seq()
+                    && m.hBin().equalsIgnoreCase(c.hBin())
+                    && m.hCfg().equalsIgnoreCase(c.hCfg())
+                    && m.hMem().equalsIgnoreCase(c.hMem())
+                    && m.hComb().equalsIgnoreCase(c.hComb())
+                    && m.prevHash().equalsIgnoreCase(c.prevHash())
+                    && Arrays.equals(Base64.getDecoder().decode(m.sig()), c.sig());
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
     public static Map<String, String> diffHint(Reason r) {
         Map<String, String> m = new HashMap<>();
         m.put("component", switch (r) {
@@ -175,6 +208,7 @@ public final class Verifier {
             case POLICY_CFG_CHANGED, MEASURE_MISMATCH_CFG -> "config";
             case POLICY_MEM_CHANGED, MEASURE_MISMATCH_MEM -> "memory";
             case KEY_MISMATCH -> "key";
+            case CHAIN_MISMATCH -> "chain";
             default -> "-";
         });
         return m;

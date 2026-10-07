@@ -44,7 +44,7 @@ public final class ChainAnchor {
         loadConfig();
     }
 
-    public record AnchorReceipt(String ledgerRef, boolean fromChain, long chainTs) {}
+    public record AnchorReceipt(String ledgerRef, boolean fromChain, long chainTs, Abi.ChainRecord chainRec) {}
 
     /** config/chain.json: {"rpcUrl":"...","contractAddr":"0x..","from":"0x..","gas":"0x.."} (optional). */
     private void loadConfig() {
@@ -167,11 +167,20 @@ public final class ChainAnchor {
 
     // ---- anchor ----
 
+    /** eth_call getLatest + decode. null = RPC/decode trouble, caller degrades to no-readback. */
+    public Abi.ChainRecord readLatest(String agentId) {
+        String r = rpc("eth_call", "[{\"to\":\"" + contractAddr + "\",\"data\":\"0x"
+                + Abi.hex(Abi.encGetLatest(agentId)) + "\"},\"latest\"]", 2000);
+        if (r == null || !r.startsWith("0x")) return null;
+        return Abi.decodeLatest(r);
+    }
+
     public AnchorReceipt anchor(SignedMeasurement m) {
         chainUp = probe();
         String ref;
         boolean onChain = false;
         long chainTs = -1;
+        Abi.ChainRecord chainRec = null;
 
         if (chainUp && configured()) {
             try {
@@ -182,8 +191,8 @@ public final class ChainAnchor {
                     if (en != null) {
                         String st = receiptStatus(en);
                         if (confirmed(st)) enrolled = true;
-                        else if ("0x0".equals(st)) { ref = "local-" + (++localIndex) + "(enroll-revert)"; return finish(m, ref, false, -1); }
-                        else { ref = "local-" + (++localIndex) + "(enroll-pending)"; return finish(m, ref, false, -1); }
+                        else if ("0x0".equals(st)) { ref = "local-" + (++localIndex) + "(enroll-revert)"; return finish(m, ref, false, -1, null); }
+                        else { ref = "local-" + (++localIndex) + "(enroll-pending)"; return finish(m, ref, false, -1, null); }
                     }
                 } else if (count > 0) {
                     enrolled = true;
@@ -196,6 +205,9 @@ public final class ChainAnchor {
                         ref = tx;
                         onChain = true;
                         chainTs = fetchChainTs();
+                        // Authoritative readback: Boss verifies what the chain STORED,
+                        // not just what we submitted (review item 37).
+                        chainRec = readLatest(m.agentId());
                     } else if ("0x0".equals(st)) {
                         ref = "local-" + (++localIndex) + "(anchor-revert)";
                     } else {
@@ -214,15 +226,15 @@ public final class ChainAnchor {
         } else {
             ref = "local-" + (++localIndex);
         }
-        return finish(m, ref, onChain, chainTs);
+        return finish(m, ref, onChain, chainTs, chainRec);
     }
 
-    private AnchorReceipt finish(SignedMeasurement m, String ref, boolean onChain, long chainTs) {
+    private AnchorReceipt finish(SignedMeasurement m, String ref, boolean onChain, long chainTs, Abi.ChainRecord chainRec) {
         try {
             Files.writeString(fallback, withRef(m, ref) + "\n",
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException ignored) {}
-        return new AnchorReceipt(ref, onChain, chainTs);
+        return new AnchorReceipt(ref, onChain, chainTs, chainRec);
     }
 
     private boolean probe() {

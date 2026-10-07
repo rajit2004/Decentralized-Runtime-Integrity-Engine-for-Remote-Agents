@@ -131,8 +131,10 @@ public final class Main {
                 SignedMeasurement anchored = new SignedMeasurement(agentId, seq, ts, m.hBin(), m.hCfg(),
                         m.hMem(), m.hComb(), prevHash, sig, receipt.ledgerRef());
                 Measurer.Measurement re = Measurer.measure(bin, cfg, AgentState.current());
-                Verifier.Verdict v = verifier.check(re, anchored, effectiveTs, receipt.fromChain());
+                Verifier.Verdict v = verifier.check(re, anchored, effectiveTs, receipt.fromChain(), receipt.chainRec());
                 long t2 = System.nanoTime();
+                String readback = receipt.fromChain()
+                        ? (receipt.chainRec() != null ? "readback=ok" : "readback=miss") : "readback=off";
 
                 String state = v.ok() ? "GREEN" : "RED";
                 String component = Verifier.diffHint(v.reason()).getOrDefault("component", "-");
@@ -147,6 +149,7 @@ public final class Main {
                 String detail = v.reason() + " " + v.detail()
                         + " | measure " + measureMs + "ms verify " + verifyMs + "ms"
                         + " | witness=" + (witOk ? "ok" : "OFF")
+                        + " " + readback
                         + " chainUp=" + receipt.fromChain() + (receipt.fromChain() ? " chainTs=" + effectiveTs : "");
                 Dashboard.Status st = new Dashboard.Status(state, seq, component, v.reason().name(),
                         baseline.hComb(), re.hComb(),

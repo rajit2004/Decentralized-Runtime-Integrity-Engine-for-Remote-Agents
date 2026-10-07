@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-for-Remote-Agents/actions/workflows/ci.yml"><img src="https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-for-Remote-Agents/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-for-Remote-Agents/wiki"><img src="https://img.shields.io/badge/wiki-pages-blue?style=flat-square" alt="Wiki" /></a>
-  <a href="#testing--ci"><img src="https://img.shields.io/badge/Tests-65_checks-AB47BC?style=flat-square" alt="Tests" /></a>
+  <a href="#testing--ci"><img src="https://img.shields.io/badge/Tests-69_checks-AB47BC?style=flat-square" alt="Tests" /></a>
   <img src="https://img.shields.io/badge/track-1.6_Cybersecurity-blue.svg?style=flat-square" alt="Track" />
   <img src="https://img.shields.io/badge/made_with-Java_17+-red?logo=openjdk&style=flat-square" alt="Java" />
   <img src="https://img.shields.io/badge/chain-Hardhat_local_node-yellow?logo=ethereum&style=flat-square" alt="Chain" />
@@ -46,7 +46,7 @@
 
 Remote agents (AI bots, edge workers, enterprise daemons) run where you can't see them. An attacker with file access can patch the binary, edit `config.json`, or flip an in-memory limit. We don't prevent the edit - we **prove it within one 5s interval plus ~4ms pipeline average (~24ms worst, measured over 20 trials), and flag STALE if no fresh anchor arrives after 12s.**
 
-Every 5 seconds the Checker takes 3 fingerprints, seals them with Ed25519, and anchors them. The Boss re-measures (demo mode) and compares fresh fingerprints against the anchored log **and** against a golden baseline enrolled on day one.
+Every 5 seconds the Checker takes 3 fingerprints, seals them with Ed25519, and anchors them. After each mined anchor the Boss **reads the record back from the chain** and requires it to match the submission, then compares fresh fingerprints against a golden baseline enrolled on day one.
 
 > Chain proves *timeline*. Baseline proves *what good looks like*. You need both: chain alone would accept an honest Checker that anchors a hash of the attacker's edited file; baseline alone cannot prove order. The Verifier demands `H_recomputed == H_chain == H_baseline`.
 
@@ -136,7 +136,7 @@ Phase 1 - Heartbeat (every 5s forever)
 ```mermaid
 stateDiagram-v2
     [*] --> GREEN : fresh clone boots
-    GREEN --> RED : POLICY_*_CHANGED / MEASURE_MISMATCH_* / SIG_FAIL / STALE_REPLAY / COMB_MISMATCH / PREV_HASH_BREAK
+    GREEN --> RED : POLICY_*_CHANGED / MEASURE_MISMATCH_* / SIG_FAIL / STALE_REPLAY / COMB_MISMATCH / PREV_HASH_BREAK / CHAIN_MISMATCH
     GREEN --> STALE : no fresh anchor for 12s (watchdog)
     RED --> GREEN : restore bytes / clear memory
     RED --> STALE : heartbeat stalls while RED
@@ -156,6 +156,7 @@ stateDiagram-v2
 | Heartbeat stalled (locked/hung files) | RED CYCLE_ERR, then STALE after 12s via 1s watchdog. Demo: `scripts/demo-stale.ps1` |
 | Kill the engine process | Page honestly shows "engine unreachable" (no stale green light) |
 | Swap in a new key pair | RED KEY_MISMATCH comp=key (when baseline is pinned via Enroller) |
+| Chain stores a different record than submitted | RED CHAIN_MISMATCH comp=chain (`getLatest` readback after each anchor) |
 | Rewrite a witness.jsonl line | Witness panel flips BROKEN, chain verify fails |
 
 ---
@@ -193,7 +194,7 @@ stateDiagram-v2
 | **Batch** | `batch/MerkleTree` root/min + proofs (10k scale) |
 | **Fallback Ledger** | `ledger.jsonl` tamper-evident fallback (headHash in memory), chain event log authoritative |
 | **Timing** | 5s interval, STALE after 12s, 1s watchdog; pipeline avg 4ms worst 24ms |
-| **CI** | GitHub Actions: compile, `--release 17`, 65-check SelfTest, LF gate, live smoke test, contract build |
+| **CI** | GitHub Actions: compile, `--release 17`, 69-check SelfTest, LF gate, live smoke test, contract build |
 
 ---
 
@@ -218,7 +219,7 @@ stateDiagram-v2
 │   ├── batch/                  # MerkleTree + fleet benchmarks
 │   ├── agent/AgentState.java   # dummy worker whitelisted state
 │   ├── ui/Dashboard.java       # GREEN/RED page + API :8080
-│   └── test/SelfTest.java      # 65-check regression suite
+│   └── test/SelfTest.java      # 69-check regression suite
 ├── config/
 │   ├── agent-config.json       # tamper target (edit live)
 │   └── baseline.json           # golden baseline, Boss trusted store
@@ -286,7 +287,7 @@ Never auto-overwrite the baseline from chain. Running `Enroller` also pins the c
 
 ## Testing & CI
 
-### SelfTest - 65 checks, pure JDK, exit 1 on failure
+### SelfTest - 69 checks, pure JDK, exit 1 on failure
 
 ```powershell
 javac -d out (Get-ChildItem -Recurse java/src/*.java)
@@ -298,12 +299,13 @@ Covers:
 * Keccak-256 vectors + all 4 function selectors (verified against `ethers`)
 * Ed25519 roundtrip, tampered field, wrong `seq`, corrupted signature
 * Raw-bytes `hComb` rule (and that hex-concat is a *different* wrong value)
-* Full attack table: `OK`, `POLICY_BIN/CFG/MEM_CHANGED`, `MEASURE_MISMATCH_BIN/CFG/MEM`, `SIG_FAIL`, `COMB_MISMATCH`, `PREV_HASH_BREAK`, `STALE_REPLAY` (old ts + seq reuse)
+* Full attack table: `OK`, `POLICY_BIN/CFG/MEM_CHANGED`, `MEASURE_MISMATCH_BIN/CFG/MEM`, `SIG_FAIL`, `COMB_MISMATCH`, `PREV_HASH_BREAK`, `STALE_REPLAY` (old ts + seq reuse), `CHAIN_MISMATCH` (readback diverges)
 * Sustained-tamper regression (POLICY stays POLICY across cycles, recovery -> OK)
 * Key pinning: key swap -> `KEY_MISMATCH`, pin present + matching key -> OK, legacy unpinned baseline still boots
 * Witness: 3-line chain verifies, edited line breaks the chain, wrong boss key rejected
 * Dashboard: /api/status witness object serialized (chainOk / lines / lastSeq), null when unset
 * Chain receipts: only a mined `0x1` status counts as on-chain success; pending or reverted does not
+* Chain readback: after each mined anchor the engine `eth_call`s `getLatest` and requires the stored record to equal the submission, else `CHAIN_MISMATCH`
 * `getLatest` return decode: wrapper offset + flat struct layouts, malformed payload -> null
 * Chain cursor: a linked MEASURE_MISMATCH report enters the chain, next linked report stays OK (no PREV_HASH_BREAK flip)
 * Merkle 10k-leaf build under budget + proof verify/reject + all proofs from one cached layer build
@@ -316,7 +318,7 @@ Covers:
 |---|---|
 | `javac` full build | compile breakage |
 | `javac --release 17` | accidental Java 18+ APIs |
-| `SelfTest` (65 checks) | verifier/crypto/chain regressions |
+| `SelfTest` (69 checks) | verifier/crypto/chain regressions |
 | `node --check web/app.js` | dashboard JS syntax |
 | `git ls-files --eol` on the 2 hashed files | LF/CRLF baseline portability break |
 | Live smoke: boot -> must reach GREEN | fresh-clone boot regression |
@@ -337,6 +339,7 @@ All from `Verifier.java`:
 * `COMB_MISMATCH` - `hComb != SHA256(raws)`
 * `PREV_HASH_BREAK` - missing/forked cycle (chain linkage)
 * `STALE_REPLAY` - old `block.timestamp`-checked time or reused `seq`
+* `CHAIN_MISMATCH` - the on-chain record read back via `getLatest` after anchoring differs from the submitted measurement (wrong contract, reorg, or RPC manipulation; component: chain)
 * `CYCLE_ERR` - heartbeat exception (cause shown); promotes to `STALE` past the 12s window
 
 Contract API (`Integrity.sol`, owner-only, `block.timestamp` authoritative):

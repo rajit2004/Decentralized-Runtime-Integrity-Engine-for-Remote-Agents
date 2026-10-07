@@ -28,5 +28,7 @@ CANNOT: swap in their own key pair undetected (`KEY_MISMATCH`, pin written at en
 ## Verification (off-chain - item 6)
 Ed25519 verified by Boss off-chain (EVM has no native Ed25519). Contract stores + orders + timestamps.
 History = `Anchored` event log (item 7); mapping holds latest only.
+Readback = after each mined anchor Boss `eth_call`s `getLatest` and requires the stored record
+to equal the submission, else `CHAIN_MISMATCH` (wrong contract, reorg, RPC lies; skips gracefully when the call fails).
 Freshness = `block.timestamp` authoritative when chainUp (item 8); Checker ts otherwise.
 Only `ownerOf` (deployer at enroll) may anchor (item 9).

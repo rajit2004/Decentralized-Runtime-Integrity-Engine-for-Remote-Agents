@@ -25,7 +25,7 @@ jobs:
       - name: Java 17 compatibility gate
         run: javac --release 17 -d out17 $(find java/src -name "*.java")
 
-      - name: "SelfTest (65 checks - attack table, crypto, Merkle, ABI, key pin, witness, receipt, cursor)"
+      - name: "SelfTest (69 checks - attack table, crypto, Merkle, ABI, key pin, witness, receipt, cursor, chain readback)"
         run: java -cp out integrity.test.SelfTest
 
       - name: Dashboard JS syntax
