@@ -2,6 +2,7 @@ package integrity.test;
 
 import integrity.agent.AgentState;
 import integrity.chain.Abi;
+import integrity.chain.ChainAnchor;
 import integrity.chain.Keccak;
 import integrity.batch.MerkleTree;
 import integrity.enroll.SeqStore;
@@ -46,6 +47,7 @@ public final class SelfTest {
         dashboardWitnessJson();
         merkleScale();
         abiEncoding();
+        chainReceipt();
         seqPersistence();
 
         System.out.println();
@@ -393,6 +395,16 @@ public final class SelfTest {
         long sigOff = Long.parseLong(Abi.hex(java.util.Arrays.copyOfRange(an, 4 + 7 * 32, 4 + 8 * 32)), 16);
         long expectedSigOff = 256 + 32 + ((8 + 31) / 32) * 32;
         check("sig offset word correct", sigOff == expectedSigOff);
+    }
+
+    // ---- chain receipt semantics ----
+
+    static void chainReceipt() {
+        System.out.println("[chain receipt]");
+        check("only mined 0x1 confirms; null pending and 0x0 revert do not",
+                !ChainAnchor.confirmed(null)
+                        && !ChainAnchor.confirmed("0x0")
+                        && ChainAnchor.confirmed("0x1"));
     }
 
     // ---- seq persistence ----

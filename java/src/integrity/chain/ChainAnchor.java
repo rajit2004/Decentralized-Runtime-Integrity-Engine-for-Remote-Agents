@@ -150,6 +150,9 @@ public final class ChainAnchor {
         return null;
     }
 
+    /** Only a mined 0x1 receipt counts as success. null = pending/unknown, "0x0" = reverted. */
+    public static boolean confirmed(String status) { return "0x1".equals(status); }
+
     private byte[] agentKey(String agentId) {
         return Keccak.keccak256(agentId.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
@@ -178,8 +181,9 @@ public final class ChainAnchor {
                     String en = sendTx(Abi.hex(Abi.encEnroll(m.agentId(), m.hBin(), m.hCfg(), m.hMem(), m.prevHash())));
                     if (en != null) {
                         String st = receiptStatus(en);
-                        if (!"0x0".equals(st)) enrolled = true;
-                        else { ref = "local-" + (++localIndex) + "(enroll-revert)"; return finish(m, ref, false, -1); }
+                        if (confirmed(st)) enrolled = true;
+                        else if ("0x0".equals(st)) { ref = "local-" + (++localIndex) + "(enroll-revert)"; return finish(m, ref, false, -1); }
+                        else { ref = "local-" + (++localIndex) + "(enroll-pending)"; return finish(m, ref, false, -1); }
                     }
                 } else if (count > 0) {
                     enrolled = true;
@@ -188,12 +192,14 @@ public final class ChainAnchor {
                         m.hMem(), m.hComb(), m.prevHash(), Base64decode(m.sig()))));
                 if (tx != null) {
                     String st = receiptStatus(tx);
-                    if ("0x0".equals(st)) {
-                        ref = "local-" + (++localIndex) + "(anchor-revert)";
-                    } else {
+                    if (confirmed(st)) {
                         ref = tx;
                         onChain = true;
                         chainTs = fetchChainTs();
+                    } else if ("0x0".equals(st)) {
+                        ref = "local-" + (++localIndex) + "(anchor-revert)";
+                    } else {
+                        ref = "local-" + (++localIndex) + "(anchor-pending)";
                     }
                 } else {
                     ref = "local-" + (++localIndex) + "(send-fail)";
