@@ -13,7 +13,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Judge-proof verifier on frozen contract.
+ * Independent verifier on frozen contract.
  * Loads full golden baseline (hBin/hCfg/hMem/hComb) once, immutable.
  * Boss independently re-measures, then:
  *  0 key on disk == key pinned at enrollment (catches key-swap attacks)
@@ -100,7 +100,7 @@ public final class Verifier {
                 pinned, pinContract, pinChainId);
     }
 
-    /** Full check. re = Boss independent measurement (demo only - remote has signed measurement only), m = reported. */
+    /** Full check. re = Boss independent measurement (single-host only - remote has signed measurement only), m = reported. */
     public Verdict check(Measurer.Measurement re, SignedMeasurement m) throws Exception {
         return check(re, m, m.ts(), false, null);
     }
@@ -152,7 +152,7 @@ public final class Verifier {
             return new Verdict(Reason.PREV_HASH_BREAK, expectedPrev, m.prevHash(), "genesis prev must be baseline hComb or zeros");
 
         // The report is authentic, fresh, monotonic and linked: it enters the
-        // chain NOW. Verdicts below judge state, not linkage, so a mid-cycle
+        // chain NOW. Verdicts below evaluate state, not linkage, so a mid-cycle
         // change (MEASURE_MISMATCH_*) or sustained tamper stays itself instead
         // of flipping every later cycle into PREV_HASH_BREAK. Matches Main's
         // per-cycle cursor advance and the contract's prevHash linkage rule.

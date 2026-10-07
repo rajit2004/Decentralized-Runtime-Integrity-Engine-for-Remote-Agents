@@ -15,7 +15,8 @@ PIPELINE avg=4ms worst=24ms
 ```
 - Typical detection after file edit: **next cycle, ~5.0s + ~4ms**.
 - Worst observed: **5024ms** (5s interval + 24ms pipeline).
-- STALE (heartbeat stalled, e.g. locked/hung files): watchdog 1s tick, dashboard STALE after **12s** with no fresh anchor. Demo: scripts/demo-stale.ps1.
+- On-chain anchoring (RPC send + receipt wait + readback) sits outside these pipeline spans; the dashboard's `anchor+verify` timing includes it.
+- STALE (heartbeat stalled, e.g. locked/hung files): watchdog 1s tick, dashboard STALE after **12s** with no fresh anchor. Script: scripts/demo-stale.ps1.
 
 ## Merkle batch (scale fix)
 ```
@@ -25,5 +26,5 @@ naive=2000.0 TPS vs batched=0.0167 TPS reduction=120000x
 ```
 Run: `java -cp out integrity.batch.BatchBench 10000`, `java -cp out integrity.batch.Bench20`.
 
-## What to tell judges
-"5s heartbeat, ~4ms pipeline avg, ~24ms worst, STALE after 12s. Batch path: 10k-device window builds in 93ms, 1 root/min."
+## Headline numbers
+5s heartbeat, ~4ms pipeline avg, ~24ms worst, STALE after 12s. Batch path: 10k-device window builds in 93ms, 1 root/min.

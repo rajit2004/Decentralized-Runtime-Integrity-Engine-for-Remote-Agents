@@ -9,7 +9,7 @@
 <body>
 <header class="top">
   <div>
-    <h1>Integrity Engine <span class="dim">- agent-01 · Track 1.6</span></h1>
+    <h1>Integrity Engine <span class="dim">- agent-01</span></h1>
     <p class="sub">Signed <code>agentId|seq|ts|hBin|hCfg|hMem|hComb|prevHash</code> · chain = timeline · baseline = goodness</p>
   </div>
   <div class="top-right">
@@ -52,8 +52,8 @@
       <p class="hint" id="copyMsg"></p>
     </div>
     <div class="card">
-      <h2>Demo attacks</h2>
-      <p class="hint">One click each. Watch the hero flip RED, then restore.</p>
+      <h2>Attack simulation</h2>
+      <p class="hint">One click each: the engine flips RED, then restore returns GREEN.</p>
       <div class="btns">
         <button id="bTamperCfg" class="danger">Tamper config file</button>
         <button id="bRestoreCfg">Restore config</button>
@@ -66,7 +66,7 @@
   </section>
 
   <section class="card scenario">
-    <h2>▶ Guided attack scenario <span class="dim">(hands-free demo for judges)</span></h2>
+    <h2>▶ Guided attack scenario <span class="dim">(hands-free walkthrough)</span></h2>
     <p class="hint">Runs: tamper config → wait 2 cycles → show RED → restore → show GREEN. Narrates each step.</p>
     <div class="btns">
       <button id="bScenario" class="primary">Run config-attack scenario</button>
@@ -131,7 +131,7 @@
   </section>
 
   <footer>
-    <p>Open limits, stated first: Checker can lie without TPM/TEE · Boss re-read is demo-only (remote has signed measurement only) · memory = whitelisted map · <code>ledger.jsonl</code> is fallback, chain event log authoritative.</p>
+    <p>Open limits, stated first: Checker can lie without TPM/TEE · Boss re-read is single-host only (remote uses the signed measurement only) · memory = whitelisted map · <code>ledger.jsonl</code> is fallback, chain event log authoritative.</p>
   </footer>
 </main>
 <script src="/app.js"></script>

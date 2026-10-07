@@ -24,7 +24,7 @@ import java.security.KeyPair;
  * Item 5: 1s watchdog flips dashboard to STALE even with zero requests.
  * Item 14: seq persisted in config/seq.dat.
  * Item 3: keys in keys/ (outside writable config/), see KeyStore.
- * Item 12: Boss re-read is "independent recompute, demo only" - remote has signed measurement only.
+ * Item 12: Boss re-read is "independent recompute, single-host only" - remote has signed measurement only.
  */
 public final class Main {
     static final long INTERVAL_MS = 5000;
@@ -43,7 +43,7 @@ public final class Main {
         Verifier.Baseline baseline = Verifier.loadBaseline(base);
         System.out.println("BASELINE hComb=" + baseline.hComb());
         if (baseline.publicKey().isEmpty())
-            System.out.println("KEY PIN: not pinned (demo mode, fresh-clone friendly). Run Enroller to pin the boss-trusted key and catch key swaps as KEY_MISMATCH.");
+            System.out.println("KEY PIN: not pinned (fresh-clone friendly). Run Enroller to pin the boss-trusted key and catch key swaps as KEY_MISMATCH.");
         else
             System.out.println("KEY PIN: pinned " + baseline.publicKey().substring(0, Math.min(16, baseline.publicKey().length())) + "... (key swap -> KEY_MISMATCH)");
         if (baseline.chainContract().isEmpty())

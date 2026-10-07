@@ -42,7 +42,7 @@
 
 ## What is This?
 
-**Decentralized Runtime Integrity Engine** is a verifiable integrity framework for remote agents, built for Technorazz 2026, Track 1.6.
+**Decentralized Runtime Integrity Engine** is a verifiable integrity framework for remote agents: on-chain anchored tamper detection with golden-baseline verification.
 
 Remote agents (AI bots, edge workers, enterprise daemons) run where you can't see them. An attacker with file access can patch the binary, edit `config.json`, or flip an in-memory limit. We don't prevent the edit - we **prove it within one 5s interval plus ~4ms pipeline average (~24ms worst, measured over 20 trials), and flag STALE if no fresh anchor arrives after 12s.**
 
@@ -72,7 +72,7 @@ flowchart LR
   end
 
   subgraph BOSS["Boss / Verifier (trusted)"]
-    RE["re-measure (demo)"] --> V["Verifier - 6 checks<br/>comb / seal / link /<br/>recompute / baseline / freshness"]
+    RE["re-measure (single host)"] --> V["Verifier - 6 checks<br/>comb / seal / link /<br/>recompute / baseline / freshness"]
     BASE[("baseline.json<br/>golden, enrolled Phase 0")] --> V
   end
 
@@ -153,7 +153,7 @@ stateDiagram-v2
 | Memory flip via endpoint | RED POLICY_MEM_CHANGED comp=memory |
 | Lying Checker (anchor old) | RED MEASURE_MISMATCH_* comp=that component |
 | Replay / reorder | RED STALE_REPLAY (seq/ts/prevHash) |
-| Heartbeat stalled (locked/hung files) | RED CYCLE_ERR, then STALE after 12s via 1s watchdog. Demo: `scripts/demo-stale.ps1` |
+| Heartbeat stalled (locked/hung files) | RED CYCLE_ERR, then STALE after 12s via 1s watchdog. Script: `scripts/demo-stale.ps1` |
 | Kill the engine process | Page honestly shows "engine unreachable" (no stale green light) |
 | Swap in a new key pair | RED KEY_MISMATCH comp=key (when baseline is pinned via Enroller) |
 | Chain stores a different record than submitted | RED CHAIN_MISMATCH comp=chain (`getLatest` readback after each anchor) |
@@ -167,13 +167,13 @@ stateDiagram-v2
 * **Deterministic Memory Hashing** - no RAM dumps (too noisy). Only `mode, limit, version` serialized via sorted `TreeMap` to `k=v;k=v` canonical form, then hashed. Same state always gives the same hash, no false positives.
 * **Golden Baseline Enrollment** - Phase 0 runs once in a clean room. `Enroller.java` captures `hBin/hCfg/hMem/hComb` into `config/baseline.json`, the Boss's trusted store, never overwritten from chain. Legit upgrades need a re-enrollment. It also pins the boss-trusted key and, when `config/chain.json` exists, the contract address + chain id.
 * **Wax-Seal Signatures (frozen)** - payload `agentId|seq|ts|hBin|hCfg|hMem|hComb|prevHash`, Ed25519 via `java.security` (no libs). All three component hashes covered, so the Boss can blame binary vs config vs memory. `hComb = SHA256(raw32||raw32||raw32)` (raw bytes, never hex-concat). `seq` + `prevHash` stop replay and forks.
-* **Real On-Chain Anchoring (chain authoritative, file fallback)** - a real `anchor()` tx every cycle when `config/chain.json` + node are up (`ledgerRef` = tx hash, `block.timestamp` authoritative). The baseline can pin contract + chainId at enrollment; mismatch refuses chain mode (ledger fallback). `ledger.jsonl` is always appended so the demo survives node death. History lives in `Anchored` events. Ed25519 verified off-chain (EVM has none).
+* **Real On-Chain Anchoring (chain authoritative, file fallback)** - a real `anchor()` tx every cycle when `config/chain.json` + node are up (`ledgerRef` = tx hash, `block.timestamp` authoritative). The baseline can pin contract + chainId at enrollment; mismatch refuses chain mode (ledger fallback). `ledger.jsonl` is always appended so the engine survives node death. History lives in `Anchored` events. Ed25519 verified off-chain (EVM has none).
 * **6-Check Verifier with per-component blame** - GREEN only if: `hComb == SHA256(raws)`, full seal valid, `prevHash` chains, `H_re == reported` per component (catches a lying Checker), `reported == baseline` per component (catches edits), and `ts` fresh + `seq` monotonic. RED names the reason and the component.
 * **Key Pinning + Witness Audit** - enrollment pins the agent public key into `baseline.json` (a swapped key pair fails as `KEY_MISMATCH`); every verdict is counter-signed by a separate boss key into hash-chained `witness.jsonl`. A stolen agent key can forge agent signatures, but not the witness trail.
 * **Live Dashboard** - JDK `HttpServer` on `:8080`, zero deps: big status light, timeline, donut, attack buttons, hash diff view, and the witness audit panel (live chain verification, entry count, head hash, last entry). Auto-refreshes every 2s.
-* **Live Tamper Demo** - config edit flips `POLICY_CFG_CHANGED` next cycle; the memory endpoint flips `POLICY_MEM_CHANGED` with no file edit; restore returns GREEN with no restart. Easiest path: the dashboard's Tamper/Restore buttons.
+* **Live Tamper Detection** - config edit flips `POLICY_CFG_CHANGED` next cycle; the memory endpoint flips `POLICY_MEM_CHANGED` with no file edit; restore returns GREEN with no restart. Easiest path: the dashboard's Tamper/Restore buttons.
 * **Stale / Replay Guard** - rejects timestamps older than 12s (chain `block.timestamp` when up) and reused/rewound `seq`; `seq` persisted in `config/seq.dat` so restarts don't self-flag. A stalled heartbeat shows `CYCLE_ERR` with the cause first, then `STALE` after 12s (watchdog wins, no flicker).
-* **Zero External Java Deps** - pure JDK 17+ (tested on 24). `javac` + `java` is enough: no Maven, Gradle, Spring, or web3j download. Perfect for hackathon wifi.
+* **Zero External Java Deps** - pure JDK 17+ (tested on 24). `javac` + `java` is enough: no Maven, Gradle, Spring, or web3j download. Build and run fully offline.
 * **Scale: Merkle Batching** - collect a window of `hComb`, anchor one root/min, keep per-device proofs. 10k-leaf root in ~93ms. See `docs/SCALING.md`.
 * **Measured Performance** - 20 trials: pipeline avg 4ms (measure 0.6, sign 1.6, verify 2.0), worst 24ms. Detection = next 5s interval + pipeline. See `docs/BENCHMARKS.md`.
 
@@ -225,7 +225,7 @@ stateDiagram-v2
 │   └── baseline.json           # golden baseline, Boss trusted store
 ├── web/                        # dashboard UI (app.js / index.html / styles.css)
 ├── scripts/                    # run.ps1, demo-tamper.ps1, demo-stale.ps1, redeploy.ps1
-├── docs/                       # PITCH, BENCHMARKS, THREAT_MODEL, SCALING, ...
+├── docs/                       # BENCHMARKS, THREAT_MODEL, SCALING, ...
 └── README.md
 ```
 
@@ -253,7 +253,7 @@ java -cp out integrity.Main
 
 Open <http://localhost:8080> - you should see GREEN flowing with cycle + tx.
 
-### 3. Optional: real chain anchoring (recommended for judges)
+### 3. Optional: real chain anchoring (recommended)
 
 ```bash
 cd contract
@@ -265,13 +265,13 @@ npm run deploy        # writes ../config/chain.json (rpcUrl, contractAddr, from,
 
 Restart the engine after deploy - it enrolls once on-chain (`anchorCount==0`), then every heartbeat is a real `anchor()` tx (`chainUp=true`, `ledgerRef` = tx hash). If the chain is down, the engine still runs with `chainUp=false` + `ledger.jsonl`.
 
-### 4. Tamper Live (the demo)
+### 4. Tamper Live
 
 1. Open `config/agent-config.json`, change `"threshold": 100` to `999`, save.
 2. Next cycle flips RED: `POLICY_CFG_CHANGED comp=config` (sustained). Restore to `100` and GREEN returns next cycle. Memory variant: `/tamper/memory?limit=999` -> `POLICY_MEM_CHANGED` with no file edit.
 3. Byte-safety: prefer the dashboard's Tamper/Restore buttons (they never touch line endings). Stuck RED after a manual save? `git checkout -- config/agent-config.json` restores byte-identical bytes -> GREEN next cycle.
 
-Show judges `baseline.json` on screen before step 1 - that proves what good is.
+Keep `baseline.json` in view before step 1 - it is the golden definition of good.
 
 ### Re-baseline (only when you intentionally changed source/config)
 
@@ -362,18 +362,18 @@ The engine proves tampering when the agent is honest or when we can re-measure, 
 
 What the software layer does close: key swaps (`KEY_MISMATCH`, enforced by the public key pinned into `baseline.json` at enrollment) and forgeable history (boss-signed, hash-chained `witness.jsonl` that a stolen agent key cannot rewrite).
 
-A compromised Checker can sign false hashes with a stolen key; TPM/TEE is the path to closing that. In split deployments, keep the witness key on the Boss host only. This single-box demo keeps both keys on the same machine.
+A compromised Checker can sign false hashes with a stolen key; TPM/TEE is the path to closing that. In split deployments, keep the witness key on the Boss host only. This single-box deployment keeps both keys on the same machine.
 
-### Demo simplifications
+### Simplifications
 
-* **Boss file re-read** works because the demo runs on a single machine; a remote verifier would use only the signed measurement, baseline, and chain.
+* **Boss file re-read** works because this runs on a single machine; a remote verifier would use only the signed measurement, baseline, and chain.
 * **Memory hashing** covers `AgentState{mode,limit,version}` (a whitelist), not the full heap, which never stabilizes across runs.
 * **`ledger.jsonl`** is a tamper-evident fallback; the chain event log is authoritative.
 
-### Stack and demo scope
+### Stack and scope
 
 * **JDK-only** (`javac`/`java`, no Maven/Spring/Gradle/Javalin/web3j wrapper required).
-* **Binary tamper** is secondary on Windows (locked JAR / classes directory); the config edit and memory endpoint are the live attack demos.
+* **Binary tamper** is secondary on Windows (locked JAR / classes directory); the config edit and memory endpoint are the live attack paths.
 * **File reads** retry for 200ms; a missing file counts as tamper.
 
 ### Stretch goals
@@ -384,7 +384,7 @@ Split the Checker and Boss onto separate hosts, hold keys in a TPM/HSM, keep the
 
 ## Contributing
 
-Logical commits only, one feature = one commit. No amend, no force-push. Never commit `keys/*.pkcs8`, `keys/*.x509`, or real `*.key` files - demo keys generate once into ignored `keys/`. CI must pass before merge (see [Testing & CI](#testing--ci)).
+Logical commits only, one feature = one commit. No amend, no force-push. Never commit `keys/*.pkcs8`, `keys/*.x509`, or real `*.key` files - test keys generate once into ignored `keys/`. CI must pass before merge (see [Testing & CI](#testing--ci)).
 
 ```bash
 git checkout -b feat/amazing-check
@@ -402,7 +402,7 @@ Distributed under the **MIT License**.
 
 ## Acknowledgements
 
-**Hardhat** for the local chain + deploy tooling, the **Java JDK** (`MessageDigest`, `Ed25519`, `HttpClient`, `HttpServer`) for a zero-dep MVP, and the **Technorazz team** for the Track 1.6 problem statement.
+**Hardhat** for the local chain + deploy tooling and the **Java JDK** (`MessageDigest`, `Ed25519`, `HttpClient`, `HttpServer`) for a zero-dependency build.
 
 ---
 

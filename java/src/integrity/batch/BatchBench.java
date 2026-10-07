@@ -5,7 +5,7 @@ import java.security.MessageDigest;
 import java.util.*;
 
 /**
- * Benchmark for pitch: builds 10k-leaf tree, proves + verifies one leaf.
+ * Benchmark for the batch path: builds 10k-leaf tree, proves + verifies one leaf.
  * Run: java -cp out integrity.batch.BatchBench
  * Math printed: naive TPS vs batched TPS + build/verify ms.
  */

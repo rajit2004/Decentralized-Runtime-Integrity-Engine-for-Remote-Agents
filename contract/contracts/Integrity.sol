@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/// @title Integrity - tamper-evident diary (Track 1.6, frozen contract)
+/// @title Integrity - tamper-evident diary (frozen contract)
 /// @notice Signed payload (UTF-8 pipe): agentId|seq|ts|hBin|hCfg|hMem|hComb|prevHash
 /// hComb = SHA256(raw32(hBin)||raw32(hCfg)||raw32(hMem)). Chain=timeline, baseline=goodness.
 /// @notice Ed25519 is verified OFF-CHAIN by the Boss (EVM has no native Ed25519).

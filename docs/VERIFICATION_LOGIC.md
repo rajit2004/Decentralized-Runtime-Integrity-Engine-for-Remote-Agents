@@ -45,5 +45,5 @@ Chain cursor (`expectedPrev`, `lastSeq`) advances on OK **and** on POLICY_* so s
 | Replay old payload | RED STALE_REPLAY |
 | Drop cycle / fork prev | RED PREV_HASH_BREAK |
 
-## Pitch line
+## One-liner
 "Sig covers all three hashes plus seq/ts/prevHash. Boss tells binary vs config vs memory, chain proves order, baseline proves good."
