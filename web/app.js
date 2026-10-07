@@ -56,7 +56,7 @@ function renderStatus(s) {
   setHash("hChain", "mChain", s.chain, s.chain === s.expected);
   setHash("hPrev", null, s.prevHash, true, true);
   $("latencyNote").textContent =
-    `measure ${s.measureMs}ms · verify ${s.verifyMs}ms · interval 5s · STALE after 12s`;
+    `measure+sign ${s.measureMs}ms · anchor+verify ${s.verifyMs}ms · interval 5s · STALE after 12s`;
   renderWitness(s.witness);
 }
 
@@ -224,8 +224,8 @@ function drawChart(h) {
   line(c => c.measureMs, "#38bdf8");
   line(c => c.verifyMs, "#a78bfa");
   ctx.fillStyle = "#8ea0c2"; ctx.font = "11px sans-serif";
-  ctx.fillText("- measure", 8, 14); ctx.fillStyle = "#38bdf8"; ctx.fillRect(70, 6, 14, 3);
-  ctx.fillStyle = "#8ea0c2"; ctx.fillText("- verify", 92, 14); ctx.fillStyle = "#a78bfa"; ctx.fillRect(150, 6, 14, 3);
+  ctx.fillText("- measure+sign", 8, 14); ctx.fillStyle = "#38bdf8"; ctx.fillRect(97, 6, 14, 3);
+  ctx.fillStyle = "#8ea0c2"; ctx.fillText("- anchor+verify", 117, 14); ctx.fillStyle = "#a78bfa"; ctx.fillRect(211, 6, 14, 3);
   h.forEach((c, i) => {
     if (c.state !== "GREEN") {
       const x = (i / Math.max(1, h.length - 1)) * (W - 8) + 4;

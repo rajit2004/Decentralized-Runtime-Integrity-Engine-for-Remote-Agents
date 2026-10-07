@@ -151,7 +151,7 @@ public final class Main {
                 if (cycle[0] % 12 == 1) witChainOk[0] = Witness.verify(witness.file(), witness.publicKey());
                 dash.setWitness(new Dashboard.WitnessInfo(true, witChainOk[0], witness.lineCount(), witness.head(), seq, v.reason().name()));
                 String detail = v.reason() + " " + v.detail()
-                        + " | measure " + measureMs + "ms verify " + verifyMs + "ms"
+                        + " | measure+sign " + measureMs + "ms anchor+verify " + verifyMs + "ms"
                         + " | witness=" + (witOk ? "ok" : "OFF")
                         + " " + readback
                         + " chainUp=" + receipt.fromChain() + (receipt.fromChain() ? " chainTs=" + effectiveTs : "");
