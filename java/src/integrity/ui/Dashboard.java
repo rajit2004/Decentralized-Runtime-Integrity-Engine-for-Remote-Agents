@@ -52,6 +52,7 @@ public final class Dashboard {
             else if (path.equals("/styles.css")) serveFile(ex, "styles.css", "text/css", false);
             else if (path.equals("/api/status")) serveJson(ex, statusJson(cur.get()));
             else if (path.equals("/api/history")) serveJson(ex, historyJson());
+            else if (path.equals("/api/evidence")) serveEvidence(ex);
             else if (path.equals("/api/baseline")) serveBaseline(ex);
             else if (path.equals("/api/tamper/config")) serveJson(ex, tamperConfig());
             else if (path.equals("/api/restore/config")) serveJson(ex, restoreConfig());
@@ -98,22 +99,59 @@ public final class Dashboard {
         return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("<", "&lt;");
     }
 
-    String statusJson(Status s) {
-        WitnessInfo w = wit;
-        String wj = "null";
-        if (w != null) {
-            wj = "{\"enabled\":" + w.enabled() + ",\"chainOk\":" + w.chainOk()
-                    + ",\"lines\":" + w.lines() + ",\"head\":\"" + esc(w.head()) + "\""
-                    + ",\"lastSeq\":" + w.lastSeq() + ",\"lastVerdict\":\"" + esc(w.lastVerdict()) + "\"}";
-        }
+    static String witnessJson(WitnessInfo w) {
+        if (w == null) return "null";
+        return "{\"enabled\":" + w.enabled() + ",\"chainOk\":" + w.chainOk()
+                + ",\"lines\":" + w.lines() + ",\"head\":\"" + esc(w.head()) + "\""
+                + ",\"lastSeq\":" + w.lastSeq() + ",\"lastVerdict\":\"" + esc(w.lastVerdict()) + "\"}";
+    }
+
+    public String statusJson(Status s) {
         return "{\"state\":\"" + s.state() + "\",\"seq\":" + s.seq() + ",\"cycle\":" + s.cycle()
                 + ",\"verdict\":\"" + s.verdict() + "\",\"component\":\"" + s.component() + "\""
                 + ",\"expected\":\"" + s.expected() + "\",\"observed\":\"" + s.observed() + "\""
                 + ",\"chain\":\"" + s.chain() + "\",\"prevHash\":\"" + s.prevHash() + "\""
                 + ",\"tx\":\"" + esc(s.tx()) + "\",\"detail\":\"" + esc(s.detail()) + "\""
                 + ",\"measureMs\":" + s.measureMs() + ",\"verifyMs\":" + s.verifyMs()
-                + ",\"chainUp\":" + s.chainUp() + ",\"witness\":" + wj
+                + ",\"chainUp\":" + s.chainUp() + ",\"witness\":" + witnessJson(wit)
                 + ",\"now\":" + (System.currentTimeMillis() / 1000) + "}";
+    }
+
+    /** One-file evidence bundle for the demo: current status + baseline + signed witness chain. */
+    private void serveEvidence(HttpExchange ex) throws IOException {
+        try {
+            int cap = 500;
+            java.util.List<String> wlines = Files.readAllLines(witnessPath);
+            int start = Math.max(0, wlines.size() - cap);
+            StringBuilder sb = new StringBuilder();
+            sb.append("{\"generatedAt\":").append(System.currentTimeMillis() / 1000)
+              .append(",\"generator\":\"integrity-engine evidence bundle v1\"")
+              .append(",\"status\":").append(statusJson(cur.get()))
+              .append(",\"witness\":").append(witnessJson(wit))
+              .append(",\"baseline\":");
+            try { sb.append(Files.readString(baselinePath)); }
+            catch (Exception e) { sb.append("null"); }
+            sb.append(",\"witnessLines\":{");
+            sb.append("\"truncated\":").append(start > 0)
+              .append(",\"lines\":[");
+            boolean first = true;
+            for (int i = start; i < wlines.size(); i++) {
+                String l = wlines.get(i);
+                if (l.isBlank()) continue;
+                if (!first) sb.append(",");
+                first = false;
+                sb.append("\"").append(esc(l)).append("\"");
+            }
+            sb.append("]}}");
+            byte[] b = sb.toString().getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Content-Type", "application/json; charset=utf-8");
+            ex.getResponseHeaders().add("Cache-Control", "no-store");
+            ex.getResponseHeaders().add("Content-Disposition", "attachment; filename=\"evidence-bundle.json\"");
+            ex.sendResponseHeaders(200, b.length);
+            try (OutputStream o = ex.getResponseBody()) { o.write(b); }
+        } catch (Exception e) {
+            serveJson(ex, "{\"ok\":false,\"msg\":\"" + esc(String.valueOf(e)) + "\"}");
+        }
     }
 
     synchronized String historyJson() {
@@ -135,6 +173,7 @@ public final class Dashboard {
     }
 
     private final Path baselinePath = Paths.get("config/baseline.json");
+    private final Path witnessPath = Paths.get("witness.jsonl");
 
     private void serveBaseline(HttpExchange ex) throws IOException {
         try {

@@ -119,14 +119,15 @@
         <div id="donutLegend" class="legend"></div>
       </div>
     </div>
-    <div class="card">
-      <h2>Witness audit <span class="dim">(boss counter-attestation)</span></h2>
-      <div class="hashrow"><span>chain</span><code id="witChain">-</code><b id="witChainMark"></b></div>
-      <div class="hashrow"><span>entries</span><code id="witLines">-</code><b></b></div>
-      <div class="hashrow"><span>head (sha256)</span><code id="witHead" data-copy="">-</code><b></b></div>
-      <div class="hashrow"><span>last entry</span><code id="witLast">-</code><b></b></div>
-      <p class="hint">witness.jsonl is signed with a separate boss key: a stolen agent key can sign messages, but cannot write or rewrite this chain.</p>
-    </div>
+  </section>
+
+  <section class="card" id="witCard">
+    <h2>Witness audit <span class="dim">(boss counter-attestation)</span> <button id="bEvidence" class="chip" title="download status + baseline + signed witness chain as one JSON file">⤓ evidence</button></h2>
+    <div class="hashrow"><span>chain</span><code id="witChain">-</code><b id="witChainMark"></b></div>
+    <div class="hashrow"><span>entries</span><code id="witLines">-</code><b></b></div>
+    <div class="hashrow"><span>head (sha256)</span><code id="witHead" data-copy="">-</code><b></b></div>
+    <div class="hashrow"><span>last entry</span><code id="witLast">-</code><b></b></div>
+    <p class="hint">witness.jsonl is signed with a separate boss key: a stolen agent key can sign messages, but cannot write or rewrite this chain.</p>
   </section>
 
   <footer>

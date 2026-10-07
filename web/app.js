@@ -341,6 +341,7 @@ $("bExport").onclick = async () => {
     URL.revokeObjectURL(a.href);
   } catch (e) { $("attackMsg").textContent = "export failed: " + e; }
 };
+$("bEvidence").onclick = () => { location.href = "/api/evidence"; };
 let present = false;
 $("bPresent").onclick = () => {
   present = !present;

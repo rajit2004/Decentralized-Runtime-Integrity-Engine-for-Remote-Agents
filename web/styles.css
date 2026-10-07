@@ -78,6 +78,7 @@ button:disabled { opacity:.45; cursor:default; }
 .legend div { margin:4px 0; }
 .sw { display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:8px; }
 body.present header.top, body.present .grid, body.present .card, body.present footer { display:none; }
+body.present #witCard { display:block; }
 body.present main { max-width:none; padding:6vh 4vw; }
 body.present .hero { padding:10vh 4vw; }
 body.present .state { font-size:22vw; line-height:1; }
