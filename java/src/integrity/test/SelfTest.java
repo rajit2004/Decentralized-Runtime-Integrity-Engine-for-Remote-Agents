@@ -44,6 +44,7 @@ public final class SelfTest {
         sustainedTamperStaysPolicy();
         cursorRecovery();
         chainReadback();
+        chainPin();
         keyPinning();
         witnessChain();
         dashboardWitnessJson();
@@ -132,7 +133,7 @@ public final class SelfTest {
         Files.writeString(cfg, "{\n  \"threshold\": 100\n}\n");
 
         Measurer.Measurement golden = Measurer.measure(bin, cfg, STATE);
-        baseline = new Verifier.Baseline(AGENT, golden.hBin(), golden.hCfg(), golden.hMem(), golden.hComb(), "");
+        baseline = new Verifier.Baseline(AGENT, golden.hBin(), golden.hCfg(), golden.hMem(), golden.hComb(), "", "", "");
         kp = KeyStore.defaults().loadOrCreate();
         signer = new Signer(kp.getPrivate());
 
@@ -319,6 +320,27 @@ public final class SelfTest {
                 v3.check(golden, m, now, true, null).reason() == Verifier.Reason.OK);
     }
 
+    // ---- chain-config pinning: chain.json must point at the enrolled contract ----
+
+    static void chainPin() throws Exception {
+        System.out.println("[chain pin]");
+        check("matching pin accepted",
+                ChainAnchor.pinMatches("0x5FbDB2315678afecb367f032d93F642f64180aa3", "0x5fbdb2315678afecb367f032d93f642f64180aa3"));
+        check("different contract refused",
+                !ChainAnchor.pinMatches("0x5FbDB2315678afecb367f032d93F642f64180aa3", "0x0000000000000000000000000000000000000001"));
+        check("absent pin stays open (fresh-clone friendly)",
+                ChainAnchor.pinMatches("", "anything") && ChainAnchor.pinMatches(null, "anything"));
+
+        Path tmp = Files.createTempFile("integrity-chainpin", ".json");
+        Files.writeString(tmp, "{\"agentId\":\"" + AGENT + "\",\"hBin\":\"" + h64(1) + "\",\"hCfg\":\"" + h64(2)
+                + "\",\"hMem\":\"" + h64(3) + "\",\"hComb\":\"" + h64(4) + "\",\"prevHash\":\"" + h64(5)
+                + "\",\"publicKey\":\"\",\"chainContract\":\"0x5FbDB2315678afecb367f032d93F642f64180aa3\",\"chainId\":\"0x7a69\"}");
+        var b = Verifier.loadBaseline(tmp);
+        check("baseline parses contract + chainId pins",
+                b.chainContract().equals("0x5FbDB2315678afecb367f032d93F642f64180aa3") && b.chainId().equals("0x7a69"));
+        Files.deleteIfExists(tmp);
+    }
+
     // ---- key pinning: a swapped key pair must not self-verify into GREEN ----
 
     static void keyPinning() throws Exception {
@@ -333,11 +355,12 @@ public final class SelfTest {
         check("baseline parses pinned public key", Verifier.loadBaseline(tmp).publicKey().equals("QUJDREVGR0g="));
         Files.writeString(tmp, "{\"agentId\":\"" + AGENT + "\",\"hBin\":\"" + h64(1) + "\",\"hCfg\":\"" + h64(2)
                 + "\",\"hMem\":\"" + h64(3) + "\",\"hComb\":\"" + h64(4) + "\",\"prevHash\":\"" + h64(5) + "\"}");
-        check("legacy baseline stays unpinned (fresh-clone friendly)", Verifier.loadBaseline(tmp).publicKey().isEmpty());
+        check("legacy baseline stays unpinned (fresh-clone friendly)",
+                Verifier.loadBaseline(tmp).publicKey().isEmpty() && Verifier.loadBaseline(tmp).chainContract().isEmpty());
 
         // key swap: verifier holds the ATTACKER key, baseline pins the ENROLLED key
         String pin = KeyStore.pubB64(kp.getPublic());
-        var pinned = new Verifier.Baseline(AGENT, baseline.hBin(), baseline.hCfg(), baseline.hMem(), baseline.hComb(), pin);
+        var pinned = new Verifier.Baseline(AGENT, baseline.hBin(), baseline.hCfg(), baseline.hMem(), baseline.hComb(), pin, "", "");
         var attacker = Signer.generate();
         var vSwap = new Verifier(AGENT, attacker.getPublic(), pinned, 12);
         var m = signed(Measurer.measure(bin, cfg, STATE), 1, now, baseline.hComb());

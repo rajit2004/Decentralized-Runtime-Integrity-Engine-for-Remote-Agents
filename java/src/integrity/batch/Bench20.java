@@ -21,10 +21,10 @@ public final class Bench20 {
         Signer signer = new Signer(kp.getPrivate());
         List<Long> measures = new ArrayList<>(), signs = new ArrayList<>(), verifies = new ArrayList<>();
         String prev = Measurer.ZERO_HASH;
-        Verifier.Baseline base = new Verifier.Baseline("agent-01", "a", "b", "c", "d", "");
+        Verifier.Baseline base = new Verifier.Baseline("agent-01", "a", "b", "c", "d", "", "", "");
         // enroll real baseline for combine validity
         Measurer.Measurement m0 = Measurer.measure(bin, cfg, AgentState.current());
-        base = new Verifier.Baseline("agent-01", m0.hBin(), m0.hCfg(), m0.hMem(), m0.hComb(), "");
+        base = new Verifier.Baseline("agent-01", m0.hBin(), m0.hCfg(), m0.hMem(), m0.hComb(), "", "", "");
         Verifier v = new Verifier("agent-01", kp.getPublic(), base, 12);
         int okFailures = 0;
         for (int i = 1; i <= 20; i++) {

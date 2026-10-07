@@ -35,7 +35,8 @@ public final class Verifier {
         public boolean ok() { return reason == Reason.OK; }
     }
 
-    public record Baseline(String agentId, String hBin, String hCfg, String hMem, String hComb, String publicKey) {}
+    public record Baseline(String agentId, String hBin, String hCfg, String hMem, String hComb, String publicKey,
+                           String chainContract, String chainId) {}
 
     private final String agentId;
     private final PublicKey pub;
@@ -92,9 +93,11 @@ public final class Verifier {
     public static Baseline loadBaseline(Path p) throws Exception {
         String s = Files.readString(p);
         String pinned = s.contains("\"publicKey\"") ? get(s, "publicKey") : "";
+        String pinContract = s.contains("\"chainContract\"") ? get(s, "chainContract") : "";
+        String pinChainId = s.contains("\"chainId\"") ? get(s, "chainId") : "";
         return new Baseline(get(s, "agentId"), get(s, "hBin").toLowerCase(),
                 get(s, "hCfg").toLowerCase(), get(s, "hMem").toLowerCase(), get(s, "hComb").toLowerCase(),
-                pinned);
+                pinned, pinContract, pinChainId);
     }
 
     /** Full check. re = Boss independent measurement (demo only - remote has signed measurement only), m = reported. */

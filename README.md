@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-for-Remote-Agents/actions/workflows/ci.yml"><img src="https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-for-Remote-Agents/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-for-Remote-Agents/wiki"><img src="https://img.shields.io/badge/wiki-pages-blue?style=flat-square" alt="Wiki" /></a>
-  <a href="#testing--ci"><img src="https://img.shields.io/badge/Tests-69_checks-AB47BC?style=flat-square" alt="Tests" /></a>
+  <a href="#testing--ci"><img src="https://img.shields.io/badge/Tests-73_checks-AB47BC?style=flat-square" alt="Tests" /></a>
   <img src="https://img.shields.io/badge/track-1.6_Cybersecurity-blue.svg?style=flat-square" alt="Track" />
   <img src="https://img.shields.io/badge/made_with-Java_17+-red?logo=openjdk&style=flat-square" alt="Java" />
   <img src="https://img.shields.io/badge/chain-Hardhat_local_node-yellow?logo=ethereum&style=flat-square" alt="Chain" />
@@ -165,9 +165,9 @@ stateDiagram-v2
 
 * **Triple Fingerprinting** - every cycle hashes the binary (`AgentState.java`), `config/agent-config.json`, and whitelisted memory state with SHA-256. One byte change flips the whole hash.
 * **Deterministic Memory Hashing** - no RAM dumps (too noisy). Only `mode, limit, version` serialized via sorted `TreeMap` to `k=v;k=v` canonical form, then hashed. Same state always gives the same hash, no false positives.
-* **Golden Baseline Enrollment** - Phase 0 runs once in a clean room. `Enroller.java` captures `hBin/hCfg/hMem/hComb` into `config/baseline.json`, the Boss's trusted store, never overwritten from chain. Legit upgrades need a re-enrollment.
+* **Golden Baseline Enrollment** - Phase 0 runs once in a clean room. `Enroller.java` captures `hBin/hCfg/hMem/hComb` into `config/baseline.json`, the Boss's trusted store, never overwritten from chain. Legit upgrades need a re-enrollment. It also pins the boss-trusted key and, when `config/chain.json` exists, the contract address + chain id.
 * **Wax-Seal Signatures (frozen)** - payload `agentId|seq|ts|hBin|hCfg|hMem|hComb|prevHash`, Ed25519 via `java.security` (no libs). All three component hashes covered, so the Boss can blame binary vs config vs memory. `hComb = SHA256(raw32||raw32||raw32)` (raw bytes, never hex-concat). `seq` + `prevHash` stop replay and forks.
-* **Real On-Chain Anchoring (chain authoritative, file fallback)** - a real `anchor()` tx every cycle when `config/chain.json` + node are up (`ledgerRef` = tx hash, `block.timestamp` authoritative). `ledger.jsonl` is always appended so the demo survives node death. History lives in `Anchored` events. Ed25519 verified off-chain (EVM has none).
+* **Real On-Chain Anchoring (chain authoritative, file fallback)** - a real `anchor()` tx every cycle when `config/chain.json` + node are up (`ledgerRef` = tx hash, `block.timestamp` authoritative). The baseline can pin contract + chainId at enrollment; mismatch refuses chain mode (ledger fallback). `ledger.jsonl` is always appended so the demo survives node death. History lives in `Anchored` events. Ed25519 verified off-chain (EVM has none).
 * **6-Check Verifier with per-component blame** - GREEN only if: `hComb == SHA256(raws)`, full seal valid, `prevHash` chains, `H_re == reported` per component (catches a lying Checker), `reported == baseline` per component (catches edits), and `ts` fresh + `seq` monotonic. RED names the reason and the component.
 * **Key Pinning + Witness Audit** - enrollment pins the agent public key into `baseline.json` (a swapped key pair fails as `KEY_MISMATCH`); every verdict is counter-signed by a separate boss key into hash-chained `witness.jsonl`. A stolen agent key can forge agent signatures, but not the witness trail.
 * **Live Dashboard** - JDK `HttpServer` on `:8080`, zero deps: big status light, timeline, donut, attack buttons, hash diff view, and the witness audit panel (live chain verification, entry count, head hash, last entry). Auto-refreshes every 2s.
@@ -194,7 +194,7 @@ stateDiagram-v2
 | **Batch** | `batch/MerkleTree` root/min + proofs (10k scale) |
 | **Fallback Ledger** | `ledger.jsonl` tamper-evident fallback (headHash in memory), chain event log authoritative |
 | **Timing** | 5s interval, STALE after 12s, 1s watchdog; pipeline avg 4ms worst 24ms |
-| **CI** | GitHub Actions: compile, `--release 17`, 69-check SelfTest, LF gate, live smoke test, contract build |
+| **CI** | GitHub Actions: compile, `--release 17`, 73-check SelfTest, LF gate, live smoke test, contract build |
 
 ---
 
@@ -219,7 +219,7 @@ stateDiagram-v2
 │   ├── batch/                  # MerkleTree + fleet benchmarks
 │   ├── agent/AgentState.java   # dummy worker whitelisted state
 │   ├── ui/Dashboard.java       # GREEN/RED page + API :8080
-│   └── test/SelfTest.java      # 69-check regression suite
+│   └── test/SelfTest.java      # 73-check regression suite
 ├── config/
 │   ├── agent-config.json       # tamper target (edit live)
 │   └── baseline.json           # golden baseline, Boss trusted store
@@ -260,7 +260,7 @@ cd contract
 npm install
 npx hardhat node --port 8545
 # new terminal
-npm run deploy        # writes ../config/chain.json (rpcUrl, contractAddr, from, gas)
+npm run deploy        # writes ../config/chain.json (rpcUrl, contractAddr, from, gas, chainId)
 ```
 
 Restart the engine after deploy - it enrolls once on-chain (`anchorCount==0`), then every heartbeat is a real `anchor()` tx (`chainUp=true`, `ledgerRef` = tx hash). If the chain is down, the engine still runs with `chainUp=false` + `ledger.jsonl`.
@@ -281,13 +281,13 @@ java -cp out integrity.enroll.Enroller "java/src/integrity/agent/AgentState.java
 # check config/baseline.json -> hComb golden
 ```
 
-Never auto-overwrite the baseline from chain. Running `Enroller` also pins the current agent public key into the baseline (key swap protection).
+Never auto-overwrite the baseline from chain. Running `Enroller` also pins the current agent public key into the baseline (key swap protection), and when `config/chain.json` is present it pins `chainContract` + `chainId` too, so a redirected deploy file cannot silently anchor on the wrong contract or chain (engine refuses chain mode on mismatch and falls back to `ledger.jsonl` with a boot log).
 
 ---
 
 ## Testing & CI
 
-### SelfTest - 69 checks, pure JDK, exit 1 on failure
+### SelfTest - 73 checks, pure JDK, exit 1 on failure
 
 ```powershell
 javac -d out (Get-ChildItem -Recurse java/src/*.java)
@@ -306,6 +306,7 @@ Covers:
 * Dashboard: /api/status witness object serialized (chainOk / lines / lastSeq), null when unset
 * Chain receipts: only a mined `0x1` status counts as on-chain success; pending or reverted does not
 * Chain readback: after each mined anchor the engine `eth_call`s `getLatest` and requires the stored record to equal the submission, else `CHAIN_MISMATCH`
+* Chain pinning: `Enroller` pins `chainContract` + `chainId` into the baseline when `config/chain.json` is present; mismatch refuses chain mode (ledger fallback + boot log)
 * `getLatest` return decode: wrapper offset + flat struct layouts, malformed payload -> null
 * Chain cursor: a linked MEASURE_MISMATCH report enters the chain, next linked report stays OK (no PREV_HASH_BREAK flip)
 * Merkle 10k-leaf build under budget + proof verify/reject + all proofs from one cached layer build
@@ -318,7 +319,7 @@ Covers:
 |---|---|
 | `javac` full build | compile breakage |
 | `javac --release 17` | accidental Java 18+ APIs |
-| `SelfTest` (69 checks) | verifier/crypto/chain regressions |
+| `SelfTest` (73 checks) | verifier/crypto/chain regressions |
 | `node --check web/app.js` | dashboard JS syntax |
 | `git ls-files --eol` on the 2 hashed files | LF/CRLF baseline portability break |
 | Live smoke: boot -> must reach GREEN | fresh-clone boot regression |

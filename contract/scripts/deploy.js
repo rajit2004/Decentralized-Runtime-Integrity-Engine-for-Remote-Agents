@@ -10,12 +10,14 @@ async function main() {
   await c.waitForDeployment();
   const addr = await c.getAddress();
   const [signer] = await hre.ethers.getSigners();
+  const net = await hre.ethers.provider.getNetwork();
 
   const cfg = {
     rpcUrl: "http://127.0.0.1:8545",
     contractAddr: addr,
     from: await signer.getAddress(),
-    gas: "0xf4240"
+    gas: "0xf4240",
+    chainId: "0x" + net.chainId.toString(16)
   };
   const out = path.join(__dirname, "..", "..", "config", "chain.json");
   fs.mkdirSync(path.dirname(out), { recursive: true });

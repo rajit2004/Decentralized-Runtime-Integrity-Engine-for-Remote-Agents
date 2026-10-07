@@ -30,5 +30,8 @@ Ed25519 verified by Boss off-chain (EVM has no native Ed25519). Contract stores 
 History = `Anchored` event log (item 7); mapping holds latest only.
 Readback = after each mined anchor Boss `eth_call`s `getLatest` and requires the stored record
 to equal the submission, else `CHAIN_MISMATCH` (wrong contract, reorg, RPC lies; skips gracefully when the call fails).
+Pin = enrollment also records `chainContract` + `chainId` in the baseline (when `config/chain.json` exists);
+the engine refuses chain mode on any mismatch (redirected chain file, wrong network) and falls back to
+`ledger.jsonl` with a boot log - no silent anchoring on a chain the Boss never approved.
 Freshness = `block.timestamp` authoritative when chainUp (item 8); Checker ts otherwise.
 Only `ownerOf` (deployer at enroll) may anchor (item 9).

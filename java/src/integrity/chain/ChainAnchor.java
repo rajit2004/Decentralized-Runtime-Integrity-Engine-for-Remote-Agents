@@ -33,15 +33,32 @@ public final class ChainAnchor {
     private String from;
     private long gas = 1_000_000;
     private boolean enrolled = false;
+    // Baseline pins (item 41): refuse chain mode if chain.json points elsewhere.
+    private final String pinnedContract;
+    private final String pinnedChainId;
+    private Boolean chainIdOk;
     // Hardhat's node 400s Java's default HTTP/2 upgrade attempt - pin HTTP/1.1.
     private final HttpClient http = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(1)).build();
 
-    public ChainAnchor(String rpcUrl) {
+    public ChainAnchor(String rpcUrl, String pinnedContract, String pinnedChainId) {
         this.defaultRpc = rpcUrl;
         this.rpcUrl = rpcUrl;
+        this.pinnedContract = pinnedContract == null ? "" : pinnedContract;
+        this.pinnedChainId = pinnedChainId == null ? "" : pinnedChainId;
         loadConfig();
+        if (contractAddr != null && !pinMatches(this.pinnedContract, contractAddr)) {
+            System.out.println("CHAIN PIN: contract mismatch pinned=" + this.pinnedContract
+                    + " configured=" + contractAddr + " -> chain mode refused, ledger fallback");
+            contractAddr = null;
+        }
+    }
+
+    /** Absent pin = open (fresh-clone friendly); present pin must match case-insensitively. */
+    public static boolean pinMatches(String pinned, String live) {
+        if (pinned == null || pinned.isEmpty()) return true;
+        return live != null && live.equalsIgnoreCase(pinned);
     }
 
     public record AnchorReceipt(String ledgerRef, boolean fromChain, long chainTs, Abi.ChainRecord chainRec) {}
@@ -71,6 +88,18 @@ public final class ChainAnchor {
     }
 
     public boolean configured() { return contractAddr != null; }
+
+    /** Live eth_chainId must equal the baseline pin; verified once per boot. */
+    private boolean chainIdVerified() {
+        if (pinnedChainId == null || pinnedChainId.isEmpty()) return true;
+        if (chainIdOk != null) return chainIdOk;
+        String live = rpc("eth_chainId", "[]", 2000);
+        chainIdOk = pinMatches(pinnedChainId, live);
+        if (!chainIdOk)
+            System.out.println("CHAIN PIN: chainId mismatch pinned=" + pinnedChainId
+                    + " live=" + live + " -> chain mode refused, ledger fallback");
+        return chainIdOk;
+    }
 
     // ---- raw JSON-RPC helpers (no web3j) ----
 
@@ -182,7 +211,7 @@ public final class ChainAnchor {
         long chainTs = -1;
         Abi.ChainRecord chainRec = null;
 
-        if (chainUp && configured()) {
+        if (chainUp && configured() && chainIdVerified()) {
             try {
                 long count = anchorCount(m.agentId());
                 if (count == 0 && !enrolled) {
@@ -219,6 +248,9 @@ public final class ChainAnchor {
             } catch (Exception e) {
                 ref = "local-" + (++localIndex) + "(chain-err)";
             }
+        } else if (chainUp && configured()) {
+            // pinned chainId != live chainId: refuse to anchor on the wrong chain.
+            ref = "local-" + (++localIndex) + "(chainid-refused)";
         } else if (chainUp) {
             // probe-only: node reachable but contract not configured (no fake tx hash).
             ref = "chain-unconfigured";
