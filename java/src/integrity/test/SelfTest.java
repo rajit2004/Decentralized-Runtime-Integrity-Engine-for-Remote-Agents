@@ -434,6 +434,20 @@ public final class SelfTest {
         long sigOff = Long.parseLong(Abi.hex(java.util.Arrays.copyOfRange(an, 4 + 7 * 32, 4 + 8 * 32)), 16);
         long expectedSigOff = 256 + 32 + ((8 + 31) / 32) * 32;
         check("sig offset word correct", sigOff == expectedSigOff);
+
+        // getLatest return codec: wrapper offset + struct head + sig tail
+        var rec = new Abi.ChainRecord(h64(1), h64(2), h64(3), h64(4), h64(5), 42, 1790000000L, new byte[]{1, 2, 3, 4});
+        var dec = Abi.decodeLatest(Abi.encodeLatest(rec));
+        check("getLatest decode round-trips",
+                dec != null && dec.hBin().equals(rec.hBin()) && dec.hCfg().equals(rec.hCfg())
+                        && dec.hMem().equals(rec.hMem()) && dec.hComb().equals(rec.hComb())
+                        && dec.prevHash().equals(rec.prevHash()) && dec.seq() == 42
+                        && dec.ts() == 1790000000L && Arrays.equals(dec.sig(), rec.sig()));
+        var decFlat = Abi.decodeLatest(Abi.encodeLatest(rec).substring(64)); // drop wrapper word
+        check("getLatest decode accepts flat struct",
+                decFlat != null && decFlat.seq() == 42 && decFlat.hComb().equals(rec.hComb()));
+        check("malformed getLatest payload -> null",
+                Abi.decodeLatest("0xdead") == null && Abi.decodeLatest(null) == null);
     }
 
     // ---- chain receipt semantics ----
