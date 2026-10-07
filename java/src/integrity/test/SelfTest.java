@@ -43,6 +43,7 @@ public final class SelfTest {
         sustainedTamperStaysPolicy();
         keyPinning();
         witnessChain();
+        dashboardWitnessJson();
         merkleScale();
         abiEncoding();
         seqPersistence();
@@ -324,6 +325,21 @@ public final class SelfTest {
 
     static Verifier fresh() {
         return new Verifier(AGENT, kp.getPublic(), baseline, 12);
+    }
+
+    // ---- dashboard: witness object in /api/status (panel + evidence bundle source) ----
+
+    static void dashboardWitnessJson() {
+        System.out.println("[dashboard]");
+        var d = new integrity.ui.Dashboard();
+        var st = new integrity.ui.Dashboard.Status("GREEN", 7, "-", "OK",
+                h64(1), h64(2), h64(3), h64(4), "tx", "detail", 1, 2, 3, true);
+        check("status carries witness=null when unset", d.statusJson(st).contains("\"witness\":null"));
+        d.setWitness(new integrity.ui.Dashboard.WitnessInfo(true, true, 3, h64(5), 42, "OK"));
+        String j = d.statusJson(st);
+        check("witness object exposes chainOk/lines/lastSeq",
+                j.contains("\"witness\":{\"enabled\":true,\"chainOk\":true,\"lines\":3")
+                        && j.contains("\"lastSeq\":42") && j.contains("\"lastVerdict\":\"OK\""));
     }
 
     static SignedMeasurement signed(Measurer.Measurement m, long seq, long ts, String prev) throws Exception {
