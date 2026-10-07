@@ -1,5 +1,5 @@
 # Hashed inputs: byte-identical checkout on every OS.
-# The golden baseline (hBin/hCfg) depends on exact file bytes —
+# The golden baseline (hBin/hCfg) depends on exact file bytes:
 # CRLF/LF drift would make every fresh clone boot RED.
 *.java text eol=lf
 config/agent-config.json text eol=lf
