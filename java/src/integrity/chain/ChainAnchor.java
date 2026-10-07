@@ -214,6 +214,12 @@ public final class ChainAnchor {
         if (chainUp && configured() && chainIdVerified()) {
             try {
                 long count = anchorCount(m.agentId());
+                // eth_call invalid or address has no code: refuse to send a
+                // phantom tx (txs to code-less addresses "succeed" as 0x1).
+                if (count < 0) {
+                    ref = "local-" + (++localIndex) + "(no-contract)";
+                    return finish(m, ref, false, -1, null);
+                }
                 if (count == 0 && !enrolled) {
                     // Phase 0 on-chain: chain head := our prevHash so first anchor links.
                     String en = sendTx(Abi.hex(Abi.encEnroll(m.agentId(), m.hBin(), m.hCfg(), m.hMem(), m.prevHash())));
