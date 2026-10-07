@@ -42,6 +42,7 @@ public final class SelfTest {
         rawBytesRule();
         attackTable();
         sustainedTamperStaysPolicy();
+        cursorRecovery();
         keyPinning();
         witnessChain();
         dashboardWitnessJson();
@@ -266,6 +267,30 @@ public final class SelfTest {
         } finally {
             Files.writeString(cfg, orig);
         }
+    }
+
+    /** Regression: a linked MEASURE_MISMATCH report enters the chain; the next linked report stays OK. */
+    static void cursorRecovery() throws Exception {
+        System.out.println("[cursor recovery]");
+        long now = System.currentTimeMillis() / 1000;
+        var good = Measurer.measure(bin, cfg, STATE);
+
+        var v = fresh();
+        var m1 = signed(good, 1, now, baseline.hComb());
+        check("honest genesis -> OK", v.check(good, m1, now, false).reason() == Verifier.Reason.OK);
+
+        // Mid-cycle race: report captured the dirty state, boss re-measured after restore.
+        String dirtyCfg = h64(9);
+        String dirtyComb = Measurer.combine(good.hBin(), dirtyCfg, good.hMem());
+        var dirty = new Measurer.Measurement(good.hBin(), dirtyCfg, good.hMem(), dirtyComb);
+        var m2 = signed(dirty, 2, now + 5, m1.hComb());
+        var r2 = v.check(good, m2, now + 5, false);
+        check("mid-cycle change -> MEASURE_MISMATCH_CFG", r2.reason() == Verifier.Reason.MEASURE_MISMATCH_CFG);
+
+        // State back at baseline: must link to the mismatch report, not flip to PREV_HASH_BREAK.
+        var m3 = signed(good, 3, now + 10, m2.hComb());
+        var r3 = v.check(good, m3, now + 10, false);
+        check("linked report after mismatch -> OK (no PREV_HASH_BREAK)", r3.reason() == Verifier.Reason.OK);
     }
 
     // ---- key pinning: a swapped key pair must not self-verify into GREEN ----

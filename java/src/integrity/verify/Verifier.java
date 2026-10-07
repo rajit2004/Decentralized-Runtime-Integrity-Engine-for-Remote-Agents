@@ -53,7 +53,7 @@ public final class Verifier {
         this.headHash = base.hComb();
     }
 
-    /** Item 5/10: watchdog cursor. Call on every accepted-or-policy measurement. */
+    /** Item 5/10: watchdog cursor. Call on every authentic linked measurement. */
     public void noteFresh(long wallSec, String hComb) {
         lastFreshWallSec = wallSec;
         headHash = hComb;
@@ -139,6 +139,16 @@ public final class Verifier {
         if (first && !(m.prevHash().equalsIgnoreCase(expectedPrev) || m.prevHash().equalsIgnoreCase(Measurer.ZERO_HASH)))
             return new Verdict(Reason.PREV_HASH_BREAK, expectedPrev, m.prevHash(), "genesis prev must be baseline hComb or zeros");
 
+        // The report is authentic, fresh, monotonic and linked: it enters the
+        // chain NOW. Verdicts below judge state, not linkage, so a mid-cycle
+        // change (MEASURE_MISMATCH_*) or sustained tamper stays itself instead
+        // of flipping every later cycle into PREV_HASH_BREAK. Matches Main's
+        // per-cycle cursor advance and the contract's prevHash linkage rule.
+        lastSeq = m.seq();
+        expectedPrev = m.hComb();
+        first = false;
+        noteFresh(now, m.hComb());
+
         // 4. Boss independent re-measure vs reported - tells WHICH component Checker misreported
         if (!re.hBin().equalsIgnoreCase(m.hBin()))
             return new Verdict(Reason.MEASURE_MISMATCH_BIN, m.hBin(), re.hBin(), "BINARY diverge: checker lied or MITM");
@@ -148,28 +158,13 @@ public final class Verifier {
             return new Verdict(Reason.MEASURE_MISMATCH_MEM, m.hMem(), re.hMem(), "MEMORY diverge: checker lied or MITM");
 
         // 5. reported vs golden baseline - tells WHICH golden component broke.
-        // Chain linkage already verified, so advance chain cursor even on POLICY fail:
-        // sustained tamper must stay POLICY_* (not flip to PREV_HASH_BREAK).
-        if (!m.hBin().equalsIgnoreCase(base.hBin())) {
-            lastSeq = m.seq(); expectedPrev = m.hComb(); first = false;
-            noteFresh(System.currentTimeMillis() / 1000, m.hComb());
+        if (!m.hBin().equalsIgnoreCase(base.hBin()))
             return new Verdict(Reason.POLICY_BIN_CHANGED, base.hBin(), m.hBin(), "BINARY changed vs golden baseline");
-        }
-        if (!m.hCfg().equalsIgnoreCase(base.hCfg())) {
-            lastSeq = m.seq(); expectedPrev = m.hComb(); first = false;
-            noteFresh(System.currentTimeMillis() / 1000, m.hComb());
+        if (!m.hCfg().equalsIgnoreCase(base.hCfg()))
             return new Verdict(Reason.POLICY_CFG_CHANGED, base.hCfg(), m.hCfg(), "CONFIG changed vs golden baseline");
-        }
-        if (!m.hMem().equalsIgnoreCase(base.hMem())) {
-            lastSeq = m.seq(); expectedPrev = m.hComb(); first = false;
-            noteFresh(System.currentTimeMillis() / 1000, m.hComb());
+        if (!m.hMem().equalsIgnoreCase(base.hMem()))
             return new Verdict(Reason.POLICY_MEM_CHANGED, base.hMem(), m.hMem(), "MEMORY changed vs golden baseline");
-        }
 
-        lastSeq = m.seq();
-        expectedPrev = m.hComb();
-        first = false;
-        noteFresh(System.currentTimeMillis() / 1000, m.hComb());
         return new Verdict(Reason.OK, base.hComb(), re.hComb(), "sig+measure+baseline+chain all pass seq=" + m.seq());
     }
 
