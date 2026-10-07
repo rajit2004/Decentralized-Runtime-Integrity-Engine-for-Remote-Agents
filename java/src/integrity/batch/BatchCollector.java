@@ -23,7 +23,8 @@ public final class BatchCollector {
 
     public Map<String, List<String>> proofs() throws Exception {
         Map<String, List<String>> out = new LinkedHashMap<>();
-        for (int i = 0; i < leaves.size(); i++) out.put(agentIds.get(i), MerkleTree.proof(leaves, i));
+        List<List<String>> L = MerkleTree.layers(leaves);
+        for (int i = 0; i < leaves.size(); i++) out.put(agentIds.get(i), MerkleTree.proofFromLayers(L, i));
         return out;
     }
 

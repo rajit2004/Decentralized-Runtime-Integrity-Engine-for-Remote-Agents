@@ -24,10 +24,12 @@ public final class MerkleTree {
         return Measurer.sha256Hex(all);
     }
 
-    public static String root(List<String> leaves) throws Exception {
-        if (leaves.isEmpty()) return Measurer.ZERO_HASH;
-        List<String> cur = new ArrayList<>(leaves);
-        for (int i = 0; i < cur.size(); i++) cur.set(i, cur.get(i).toLowerCase());
+    /** All tree levels: get(0) = lowercased leaves, last level = [root]. Build once, prove many. */
+    public static List<List<String>> layers(List<String> leaves) throws Exception {
+        List<List<String>> out = new ArrayList<>();
+        List<String> cur = new ArrayList<>(leaves.size());
+        for (String l : leaves) cur.add(l.toLowerCase());
+        out.add(cur);
         while (cur.size() > 1) {
             List<String> next = new ArrayList<>((cur.size() + 1) / 2);
             for (int i = 0; i < cur.size(); i += 2) {
@@ -35,31 +37,36 @@ public final class MerkleTree {
                 String r = (i + 1 < cur.size()) ? cur.get(i + 1) : l;
                 next.add(parent(l, r));
             }
+            out.add(next);
             cur = next;
         }
-        return cur.get(0);
+        return out;
+    }
+
+    public static String root(List<String> leaves) throws Exception {
+        if (leaves.isEmpty()) return Measurer.ZERO_HASH;
+        List<List<String>> L = layers(leaves);
+        return L.get(L.size() - 1).get(0);
+    }
+
+    /** Proof path for leaf index from precomputed layers: O(log n), no tree rebuild. */
+    public static List<String> proofFromLayers(List<List<String>> layers, int index) {
+        List<String> p = new ArrayList<>();
+        int idx = index;
+        for (int d = 0; d + 1 < layers.size(); d++) {
+            List<String> cur = layers.get(d);
+            int sib = (idx % 2 == 0) ? idx + 1 : idx - 1;
+            if (sib >= cur.size()) sib = idx; // duplicated odd
+            p.add(cur.get(sib));
+            idx /= 2;
+        }
+        return p;
     }
 
     /** Proof path for leaf index: siblings bottom-up. */
     public static List<String> proof(List<String> leaves, int index) throws Exception {
-        List<String> p = new ArrayList<>();
-        List<String> cur = new ArrayList<>(leaves);
-        for (int i = 0; i < cur.size(); i++) cur.set(i, cur.get(i).toLowerCase());
-        int idx = index;
-        while (cur.size() > 1) {
-            int sib = (idx % 2 == 0) ? idx + 1 : idx - 1;
-            if (sib >= cur.size()) sib = idx; // duplicated odd
-            p.add(cur.get(sib));
-            List<String> next = new ArrayList<>((cur.size() + 1) / 2);
-            for (int i = 0; i < cur.size(); i += 2) {
-                String l = cur.get(i);
-                String r = (i + 1 < cur.size()) ? cur.get(i + 1) : l;
-                next.add(parent(l, r));
-            }
-            cur = next;
-            idx /= 2;
-        }
-        return p;
+        if (leaves.isEmpty()) return new ArrayList<>();
+        return proofFromLayers(layers(leaves), index);
     }
 
     /** Verify: caller must also pass position bits; recompute with left/right order by index. */

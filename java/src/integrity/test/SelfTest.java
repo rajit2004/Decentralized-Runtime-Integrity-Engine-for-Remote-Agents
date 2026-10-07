@@ -396,6 +396,20 @@ public final class SelfTest {
         bad.set(0, h64(3));
         check("tampered proof rejected", !MerkleTree.verify(leaves.get(idx), bad, idx, root));
         check("wrong leaf rejected", !MerkleTree.verify(h64(15), proof, idx, root));
+        // All proofs derived from ONE cached layer build (odd leaf count).
+        List<String> odd = new ArrayList<>();
+        for (int i = 0; i < 17; i++) odd.add(h64(i));
+        List<List<String>> L = MerkleTree.layers(odd);
+        String oddRoot = L.get(L.size() - 1).get(0);
+        boolean allOk = oddRoot.equals(MerkleTree.root(odd));
+        for (int i = 0; i < odd.size() && allOk; i++)
+            allOk = MerkleTree.verify(odd.get(i), MerkleTree.proofFromLayers(L, i), i, oddRoot);
+        check("cached layers prove every leaf (17, odd)", allOk);
+        var bc = new integrity.batch.BatchCollector();
+        for (int i = 0; i < 17; i++) bc.add("dev-" + i, odd.get(i));
+        var all = bc.proofs();
+        check("BatchCollector.proofs covers all from one build",
+                all.size() == 17 && MerkleTree.verify(odd.get(3), all.get("dev-3"), 3, bc.root()));
     }
 
     // ---- ABI layout ----
