@@ -44,7 +44,8 @@ public final class Dashboard {
     }
 
     public HttpServer start(int port) throws IOException {
-        HttpServer h = HttpServer.create(new InetSocketAddress(port), 0);
+        // Loopback only: the tamper demo endpoints must never be reachable off-box.
+        HttpServer h = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
         h.createContext("/", ex -> {
             String path = ex.getRequestURI().getPath();
             if (path.equals("/") || path.equals("/index.html")) serveFile(ex, "index.html", "text/html", true);
