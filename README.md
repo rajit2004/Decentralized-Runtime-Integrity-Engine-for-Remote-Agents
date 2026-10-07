@@ -194,7 +194,7 @@ stateDiagram-v2
 | **Batch** | `batch/MerkleTree` root/min + proofs (10k scale) |
 | **Fallback Ledger** | `ledger.jsonl` tamper-evident fallback (headHash in memory), chain event log authoritative |
 | **Timing** | 5s interval, STALE after 12s, 1s watchdog; pipeline avg 4ms worst 24ms |
-| **CI** | GitHub Actions: compile, `--release 17`, 73-check SelfTest, LF gate, live smoke test, contract build |
+| **CI** | GitHub Actions: compile, `--release 17`, 73-check SelfTest, LF gate, live smoke test, contract build, chain e2e (deploy + pin + readback + tamper + pin refusal) |
 
 ---
 

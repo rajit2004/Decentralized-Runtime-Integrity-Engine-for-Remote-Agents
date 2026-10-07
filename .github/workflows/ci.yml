@@ -2,7 +2,9 @@ name: CI
 
 # Runs on every commit/PR. Gates: compile, Java 17 compatibility, SelfTest
 # attack table, dashboard JS syntax, LF portability, live smoke test
-# (fresh workspace boots GREEN, then tamper->RED->restore->GREEN), contract build.
+# (fresh workspace boots GREEN, then tamper->RED->restore->GREEN), contract build,
+# chain e2e (hardhat node -> deploy -> Enroller pins -> GREEN + chainUp + readback=ok
+# -> tamper RED -> restore GREEN -> wrong-contract pin refuses chain mode).
 on:
   push:
   pull_request:
@@ -92,3 +94,78 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           npx hardhat compile
+
+      - name: Chain e2e - deploy, pin, GREEN + chainUp + readback, tamper, pin refusal
+        run: |
+          set -e
+          pkill -f integrity.Main || true
+          pkill -f hardhat || true
+          (cd contract && npx hardhat node > node.log 2>&1 &)
+          up=0
+          for i in $(seq 1 30); do
+            sleep 1
+            if curl -sf -X POST http://127.0.0.1:8545 -H 'Content-Type: application/json' \
+                 -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' > /dev/null 2>&1; then up=1; break; fi
+          done
+          if [ "$up" != "1" ]; then echo "hardhat node not up"; cat contract/node.log || true; exit 1; fi
+
+          (cd contract && npx hardhat run scripts/deploy.js --network localhost)
+          test -f config/chain.json || { echo "chain.json missing"; exit 1; }
+          grep -q chainId config/chain.json || { echo "chainId not written"; cat config/chain.json; exit 1; }
+
+          java -cp out integrity.enroll.Enroller > enroller.log 2>&1
+          grep -q 'CHAIN PINNED' enroller.log || { echo "Enroller did not pin chain"; cat enroller.log; exit 1; }
+
+          java -cp out integrity.Main > engine.log 2>&1 &
+          pid=$!
+          trap 'kill $pid 2>/dev/null || true; pkill -f hardhat || true' EXIT
+          status=""
+          ok=0
+          for i in $(seq 1 30); do
+            sleep 1
+            status=$(curl -sf http://localhost:8080/api/status || true)
+            if printf '%s' "$status" | grep -q '"state":"GREEN"' && printf '%s' "$status" | grep -q '"chainUp":true'; then ok=1; break; fi
+          done
+          if [ "$ok" != "1" ]; then echo "=== never GREEN+chainUp ==="; echo "$status"; cat engine.log; exit 1; fi
+          printf '%s' "$status" | grep -q 'readback=ok' || { echo "readback not ok: $status"; cat engine.log; exit 1; }
+          echo "GREEN + chainUp + readback=ok"
+
+          curl -sf http://localhost:8080/api/tamper/config > /dev/null
+          red=0
+          for i in $(seq 1 12); do
+            sleep 1
+            status=$(curl -sf http://localhost:8080/api/status || true)
+            if printf '%s' "$status" | grep -q '"state":"RED"'; then red=1; break; fi
+          done
+          if [ "$red" != "1" ]; then echo "tamper not caught on-chain path"; echo "$status"; exit 1; fi
+          printf '%s' "$status" | grep -q 'POLICY_CFG_CHANGED' || { echo "wrong verdict: $status"; exit 1; }
+          curl -sf http://localhost:8080/api/restore/config > /dev/null
+          green=0
+          for i in $(seq 1 15); do
+            sleep 1
+            status=$(curl -sf http://localhost:8080/api/status || true)
+            if printf '%s' "$status" | grep -q '"state":"GREEN"'; then green=1; break; fi
+          done
+          if [ "$green" != "1" ]; then echo "restore did not recover"; echo "$status"; exit 1; fi
+          echo "tamper->RED->GREEN with chain up"
+
+          kill $pid 2>/dev/null || true
+          sleep 2
+          sed -i 's/"chainContract":"0x[0-9a-fA-F]*"/"chainContract":"0x0000000000000000000000000000000000000001"/' config/baseline.json
+          java -cp out integrity.Main > engine2.log 2>&1 &
+          pid=$!
+          refused=0
+          for i in $(seq 1 15); do
+            sleep 1
+            if grep -q 'CHAIN PIN: contract mismatch' engine2.log 2>/dev/null; then refused=1; break; fi
+          done
+          if [ "$refused" != "1" ]; then echo "pin refusal not logged"; cat engine2.log; exit 1; fi
+          pinok=0
+          for i in $(seq 1 10); do
+            sleep 1
+            status=$(curl -sf http://localhost:8080/api/status || true)
+            if printf '%s' "$status" | grep -q '"chainUp":false'; then pinok=1; break; fi
+          done
+          if [ "$pinok" != "1" ]; then echo "refused pin still anchoring: $status"; cat engine2.log; exit 1; fi
+          echo "wrong contract pin refused, ledger fallback"
+          echo "chain e2e OK"
