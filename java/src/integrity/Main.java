@@ -99,8 +99,10 @@ public final class Main {
         // Item 5: watchdog - 1s tick, STALE even when Checker dead / no requests.
         final long[] cycle = {0};
         final long[] seqBox = {seq};
+        final boolean chainPinned = !baseline.chainContract().isEmpty();
+        final String[] readbackBox = {"off"};
         final Dashboard.Status[] last = {new Dashboard.Status("STARTING", seq, "-", "BOOT",
-                baseline.hComb(), "-", "-", "-", "-", "boot", 0, 0, 0, false)};
+                baseline.hComb(), "-", "-", "-", "-", "boot", 0, 0, 0, false, chainPinned, "off")};
         Thread watchdog = new Thread(() -> {
             while (true) {
                 try {
@@ -109,7 +111,7 @@ public final class Main {
                     if (verifier.isStale(now) && !"STALE".equals(last[0].state())) {
                         Dashboard.Status st = new Dashboard.Status("STALE", seqBox[0], "-", "STALE",
                                 baseline.hComb(), "-", verifier.headHash(), verifier.headHash(),
-                                "-", "STALE: no fresh anchor for >" + STALE_SEC + "s (checker killed?) head=" + verifier.headHash(), cycle[0], 0, 0, false);
+                                "-", "STALE: no fresh anchor for >" + STALE_SEC + "s (checker killed?) head=" + verifier.headHash(), cycle[0], 0, 0, false, chainPinned, readbackBox[0]);
                         last[0] = st;
                         dash.update(st);
                         System.out.println("WATCHDOG STALE head=" + verifier.headHash());
@@ -137,8 +139,10 @@ public final class Main {
                 Measurer.Measurement re = Measurer.measure(bin, cfg, AgentState.current());
                 Verifier.Verdict v = verifier.check(re, anchored, effectiveTs, receipt.fromChain(), receipt.chainRec());
                 long t2 = System.nanoTime();
-                String readback = receipt.fromChain()
-                        ? (receipt.chainRec() != null ? "readback=ok" : "readback=miss") : "readback=off";
+                String rb = receipt.fromChain()
+                        ? (receipt.chainRec() != null ? "ok" : "miss") : "off";
+                readbackBox[0] = rb;
+                String readback = "readback=" + rb;
 
                 String state = v.ok() ? "GREEN" : "RED";
                 String component = Verifier.diffHint(v.reason()).getOrDefault("component", "-");
@@ -157,7 +161,7 @@ public final class Main {
                         + " chainUp=" + receipt.fromChain() + (receipt.fromChain() ? " chainTs=" + effectiveTs : "");
                 Dashboard.Status st = new Dashboard.Status(state, seq, component, v.reason().name(),
                         baseline.hComb(), re.hComb(),
-                        m.hComb(), prevHash, receipt.ledgerRef(), detail, cycle[0], measureMs, verifyMs, receipt.fromChain());
+                        m.hComb(), prevHash, receipt.ledgerRef(), detail, cycle[0], measureMs, verifyMs, receipt.fromChain(), chainPinned, rb);
                 last[0] = st;
                 dash.update(st);
                 System.out.println("cycle=" + cycle[0] + " seq=" + seq + " " + state + " " + v.reason()
@@ -177,12 +181,12 @@ public final class Main {
                     st = new Dashboard.Status("STALE", seq, "-", "STALE",
                             baseline.hComb(), "-", verifier.headHash(), verifier.headHash(), "-",
                             "STALE: heartbeat stalled >" + STALE_SEC + "s (cause: " + t + ") head=" + verifier.headHash(),
-                            cycle[0], 0, 0, false);
+                            cycle[0], 0, 0, false, chainPinned, readbackBox[0]);
                     System.out.println("WATCHDOG STALE (stalled loop) head=" + verifier.headHash());
                 } else {
                     st = new Dashboard.Status("RED", seq, "-", "CYCLE_ERR",
                             baseline.hComb(), "ERR", prevHash, prevHash, "-",
-                            "CYCLE_ERR: " + t + " (missing file counts as tamper)", cycle[0], 0, 0, false);
+                            "CYCLE_ERR: " + t + " (missing file counts as tamper)", cycle[0], 0, 0, false, chainPinned, readbackBox[0]);
                 }
                 last[0] = st;
                 dash.update(st);
