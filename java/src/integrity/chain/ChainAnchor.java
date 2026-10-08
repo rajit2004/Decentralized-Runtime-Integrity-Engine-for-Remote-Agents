@@ -22,11 +22,14 @@ import java.time.Duration;
  * when chainUp, else -1.
  */
 public final class ChainAnchor {
+    static final int LEDGER_ROTATE_AT = 50_000;
     private final String defaultRpc;
-    private final Path fallback = Paths.get("ledger.jsonl");
+    private final Path fallback;
     private final Path cfgPath = Paths.get("config/chain.json");
     public boolean chainUp = false;
     private long localIndex = 0;
+    private int ledgerLines;
+    private final int ledgerRotateAt;
 
     private String rpcUrl;
     private String contractAddr; // null = probe-only mode
@@ -43,10 +46,20 @@ public final class ChainAnchor {
             .connectTimeout(Duration.ofSeconds(1)).build();
 
     public ChainAnchor(String rpcUrl, String pinnedContract, String pinnedChainId) {
+        this(rpcUrl, pinnedContract, pinnedChainId, Paths.get("ledger.jsonl"), LEDGER_ROTATE_AT);
+    }
+
+    /** ledgerFile/ledgerRotateAt injectable for tests; production uses ledger.jsonl @50k. */
+    public ChainAnchor(String rpcUrl, String pinnedContract, String pinnedChainId,
+                       Path ledgerFile, int ledgerRotateAt) {
         this.defaultRpc = rpcUrl;
         this.rpcUrl = rpcUrl;
+        this.fallback = ledgerFile;
+        this.ledgerRotateAt = ledgerRotateAt;
         this.pinnedContract = pinnedContract == null ? "" : pinnedContract;
         this.pinnedChainId = pinnedChainId == null ? "" : pinnedChainId;
+        try { if (Files.exists(fallback)) ledgerLines = Files.readAllLines(fallback).size(); }
+        catch (Exception ignored) { ledgerLines = 0; }
         loadConfig();
         if (contractAddr != null && !pinMatches(this.pinnedContract, contractAddr)) {
             System.out.println("CHAIN PIN: contract mismatch pinned=" + this.pinnedContract
@@ -281,6 +294,14 @@ public final class ChainAnchor {
         try {
             Files.writeString(fallback, withRef(m, ref) + "\n",
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            // Rotation: archive at threshold; a fresh active file just starts empty
+            // (boot resume falls back to baseline + config/seq.dat, same as fresh clone).
+            if (++ledgerLines >= ledgerRotateAt) {
+                Path archive = fallback.resolveSibling(fallback.getFileName() + "." + System.currentTimeMillis());
+                Files.move(fallback, archive, StandardCopyOption.REPLACE_EXISTING);
+                ledgerLines = 0;
+                System.out.println("LEDGER rotated -> " + archive.getFileName());
+            }
         } catch (IOException ignored) {}
         return new AnchorReceipt(ref, onChain, chainTs, chainRec);
     }

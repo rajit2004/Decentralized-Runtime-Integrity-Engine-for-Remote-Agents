@@ -344,6 +344,17 @@ public final class SelfTest {
                 "http://env".equals(ChainAnchor.pickRpc("http://env", "http://json", "http://def"))
                         && "http://json".equals(ChainAnchor.pickRpc(null, "http://json", "http://def"))
                         && "http://def".equals(ChainAnchor.pickRpc(" ", "", "http://def")));
+
+        // ledger rotation: threshold reached -> archived, active file reset
+        Path ledDir = Files.createTempDirectory("integrity-ledger");
+        Path led = ledDir.resolve("ledger.jsonl");
+        Files.writeString(led, "old1\nold2\n");
+        var ca = new ChainAnchor("http://127.0.0.1:1", "", "", led, 3);
+        ca.anchor(signed(Measurer.measure(bin, cfg, STATE), 99, System.currentTimeMillis() / 1000, baseline.hComb()));
+        var ledArchives = Files.list(ledDir).filter(p -> p.getFileName().toString().startsWith("ledger.jsonl.")).toList();
+        check("ledger rotation at threshold archives + resets",
+                ledArchives.size() == 1 && !Files.exists(led)
+                        && Files.readAllLines(ledArchives.get(0)).size() == 3);
     }
 
     // ---- key pinning: a swapped key pair must not self-verify into GREEN ----
@@ -402,6 +413,31 @@ public final class SelfTest {
         check("wrong boss key rejected", !integrity.witness.Witness.verify(witFile, Signer.generate().getPublic()));
         check("well-formed 64-byte sig", integrity.witness.Witness.wellFormedSig(
                 Verifier.get(Files.readAllLines(witFile).get(0), "sig")));
+
+        // rotation: archive keeps the full chain, active file opens with a signed carry line
+        Path rotDir = Files.createTempDirectory("integrity-witrot");
+        Path rotFile = rotDir.resolve("witness.jsonl");
+        var w2 = new integrity.witness.Witness(rotFile, 3);
+        w2.record(1, now, "GREEN", "OK", "-", h64(1), h64(2));
+        w2.record(2, now, "RED", "POLICY_CFG_CHANGED", "config", h64(3), h64(1));
+        w2.record(3, now, "GREEN", "OK", "-", h64(4), h64(3));
+        var archives = Files.list(rotDir).filter(p -> p.getFileName().toString().startsWith("witness.jsonl.")).toList();
+        String carry = Files.readAllLines(rotFile).get(0);
+        String archLast = Files.readAllLines(archives.get(0)).get(2);
+        check("witness rotation: archive + signed carry to archived head",
+                archives.size() == 1 && Files.readAllLines(rotFile).size() == 1
+                        && Files.readAllLines(archives.get(0)).size() == 3
+                        && integrity.witness.Witness.verify(archives.get(0), w2.publicKey())
+                        && integrity.witness.Witness.verify(rotFile, w2.publicKey())
+                        && Verifier.get(carry, "head").equals(Measurer.sha256Hex(
+                                archLast.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+        w2.record(4, now, "GREEN", "OK", "-", h64(5), h64(4));
+        var rotLines = Files.readAllLines(rotFile);
+        check("post-rotation record chains from carry line",
+                rotLines.size() == 2
+                        && Verifier.get(rotLines.get(1), "prevLine").equals(Measurer.sha256Hex(
+                                rotLines.get(0).getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                        && integrity.witness.Witness.verify(rotFile, w2.publicKey()));
     }
 
     static Verifier fresh() {
