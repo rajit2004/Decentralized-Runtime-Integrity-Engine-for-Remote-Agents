@@ -35,14 +35,19 @@ jobs:
           echo "reported checks: $n"
           grep -q "Tests-${n}_checks" README.md || { echo "README badge says something other than ${n} checks"; exit 1; }
           grep -q "SelfTest - ${n} checks" README.md || { echo "README SelfTest heading mismatch (${n})"; exit 1; }
+          grep -qF "SelfTest\` (${n} checks)" README.md || { echo "README test-table row mismatch (${n})"; exit 1; }
+          for c in $(grep -oE '[1-9][0-9]+-check' README.md | grep -oE '^[0-9]+'); do
+            [ "$c" = "$n" ] || { echo "README has ${c}-check but SelfTest reports ${n}"; exit 1; }
+          done
           grep -q "SelfTest (${n} checks" .github/workflows/ci.yml || { echo "ci.yml step name mismatch (${n})"; exit 1; }
           echo "counts consistent"
 
       - name: Docs hygiene - no em-dashes, no competition framing
         run: |
           set -e
-          if git grep -I -n '—' -- .; then echo "em-dash found in tracked files"; exit 1; fi
-          if git grep -I -n -i -E 'technorazz|hackathon|track 1\.6|judges?|prize|bounty' -- .; then echo "competition framing found in tracked files"; exit 1; fi
+          # ci.yml excluded: it holds the literal patterns (a gate must not match itself).
+          if git grep -I -n '—' -- . ':(exclude).github/workflows/ci.yml'; then echo "em-dash found in tracked files"; exit 1; fi
+          if git grep -I -n -i -E 'technorazz|hackathon|track 1\.6|judges?|prize|bounty' -- . ':(exclude).github/workflows/ci.yml'; then echo "competition framing found in tracked files"; exit 1; fi
           echo "hygiene clean"
 
       - name: Dashboard JS syntax
