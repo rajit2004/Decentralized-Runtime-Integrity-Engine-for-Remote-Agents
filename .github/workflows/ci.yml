@@ -27,7 +27,7 @@ jobs:
       - name: Java 17 compatibility gate
         run: javac --release 17 -d out17 $(find java/src -name "*.java")
 
-      - name: "SelfTest (81 checks - attack table, crypto, Merkle, ABI, key pin, witness, receipt, cursor, chain readback, chain pin, env config, rotation)"
+      - name: "SelfTest (86 checks - attack table, crypto, Merkle, ABI, key pin, witness, receipt, cursor, chain readback, chain pin, env config, rotation, raw tx)"
         run: |
           set -euo pipefail
           java -cp out integrity.test.SelfTest | tee selftest.out

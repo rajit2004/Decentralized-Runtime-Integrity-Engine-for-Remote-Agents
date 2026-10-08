@@ -4,6 +4,8 @@ import integrity.agent.AgentState;
 import integrity.chain.Abi;
 import integrity.chain.ChainAnchor;
 import integrity.chain.Keccak;
+import integrity.chain.Rlp;
+import integrity.chain.Secp256k1;
 import integrity.batch.MerkleTree;
 import integrity.enroll.SeqStore;
 import integrity.measure.Measurer;
@@ -50,6 +52,7 @@ public final class SelfTest {
         dashboardWitnessJson();
         merkleScale();
         abiEncoding();
+        secpRawTxSigning();
         chainReceipt();
         seqPersistence();
 
@@ -438,6 +441,43 @@ public final class SelfTest {
                         && Verifier.get(rotLines.get(1), "prevLine").equals(Measurer.sha256Hex(
                                 rotLines.get(0).getBytes(java.nio.charset.StandardCharsets.UTF_8)))
                         && integrity.witness.Witness.verify(rotFile, w2.publicKey()));
+    }
+
+    // ---- raw tx: pure-JDK secp256k1 + EIP-155 (eth_sendRawTransaction) ----
+
+    static void secpRawTxSigning() {
+        System.out.println("[secp256k1 raw tx]");
+        byte[] priv = Secp256k1.unhex("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
+        check("hardhat account0 address derives",
+                Secp256k1.addressHex(priv).equalsIgnoreCase("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"));
+
+        byte[] to = Secp256k1.unhex("3535353535353535353535353535353535353535");
+        byte[] unsigned = Rlp.unsignedLegacy(9, 20_000_000_000L, 21_000, to,
+                1_000_000_000_000_000_000L, new byte[0], 1);
+        check("EIP-155 unsigned RLP hashes to official vector",
+                Keccak.keccak256Hex(unsigned)
+                        .equals("daf5a779ae972f972197303d7b574746c7ef83eadac0f2791ad23db92e4c8e53"));
+
+        byte[] z = Secp256k1.unhex("daf5a779ae972f972197303d7b574746c7ef83eadac0f2791ad23db92e4c8e53");
+        byte[] r = Secp256k1.unhex("28ef61340bd939bc2195fe537567866003e1a15d3c71ff63e1590620aa636276");
+        byte[] s = Secp256k1.unhex("67cbe9d8997f761aecb703304b3800ccf555c9f3dc64214b297fb1966a3b6d83");
+        // key 0x46*32 + this (r,s) recover to 0x9d8A62... (cross-checked with ethers v6)
+        String recovered = Secp256k1.recoverAddress(z, r, s, 0);
+        check("EIP-155 key vector recovers signing address (ecrecover)",
+                recovered != null && recovered.equalsIgnoreCase("0x9d8A62f656a8d1615C1294fd71e9CFb3E4855A4F"));
+
+        byte[] msg = Keccak.keccak256("raw tx signing test".getBytes(StandardCharsets.UTF_8));
+        var sig = Secp256k1.sign(priv, msg, 31337);
+        long base = 35 + 31337L * 2; // EIP-155: v = 35 + 2*chainId + recId
+        check("sign: low-S + EIP-155 v + recovers own address",
+                Secp256k1.isLowS(sig.s()) && (sig.v() == base || sig.v() == base + 1)
+                        && Secp256k1.addressHex(priv).equalsIgnoreCase(
+                                Secp256k1.recoverAddress(msg, sig.r(), sig.s(), (int) (sig.v() - base))));
+
+        check("RLP golden: dog + [cat,dog]",
+                Abi.hex(Rlp.bytes("dog".getBytes(StandardCharsets.UTF_8))).equals("83646f67")
+                        && Abi.hex(Rlp.list(Rlp.bytes("cat".getBytes(StandardCharsets.UTF_8)),
+                                Rlp.bytes("dog".getBytes(StandardCharsets.UTF_8)))).equals("c88363617483646f67"));
     }
 
     static Verifier fresh() {

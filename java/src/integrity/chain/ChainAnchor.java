@@ -36,6 +36,9 @@ public final class ChainAnchor {
     private String from;
     private long gas = 1_000_000;
     private boolean enrolled = false;
+    // Optional local signing (deploy.js writes privateKey for chainId 31337 only).
+    private byte[] rawKey;
+    private long chainIdCfg = -1;
     // Baseline pins (item 41): refuse chain mode if chain.json points elsewhere.
     private final String pinnedContract;
     private final String pinnedChainId;
@@ -102,9 +105,29 @@ public final class ChainAnchor {
                     String g = Verifier.get(j, "gas");
                     if (!g.isBlank()) this.gas = Long.parseLong(g.startsWith("0x") ? g.substring(2) : g, g.startsWith("0x") ? 16 : 10);
                 }
+                if (j.contains("\"privateKey\"")) {
+                    String k = Verifier.get(j, "privateKey");
+                    if (!k.isBlank()) {
+                        try {
+                            byte[] key = Secp256k1.unhex(k);
+                            if (key.length == 32) this.rawKey = key;
+                        } catch (Exception ignored) { this.rawKey = null; }
+                    }
+                }
+                if (j.contains("\"chainId\"")) {
+                    String c = Verifier.get(j, "chainId");
+                    if (!c.isBlank()) {
+                        try {
+                            this.chainIdCfg = Long.parseLong(c.startsWith("0x") ? c.substring(2) : c,
+                                    c.startsWith("0x") ? 16 : 10);
+                        } catch (Exception ignored) { this.chainIdCfg = -1; }
+                    }
+                }
             }
         } catch (Exception ignored) { /* probe-only mode */ }
         this.rpcUrl = pickRpc(System.getenv("RPC_URL"), jsonRpc, defaultRpc);
+        if (rawKey != null)
+            System.out.println("RAW TX: local secp256k1 signing enabled (privateKey from config/chain.json, dev chain only)");
     }
 
     public boolean configured() { return contractAddr != null; }
@@ -172,6 +195,7 @@ public final class ChainAnchor {
     }
 
     private String sendTx(String data) {
+        if (rawKey != null) return sendRawTx(data);
         if (from == null) {
             String a = rpc("eth_accounts", "[]", 2000);
             if (a == null || !a.startsWith("0x")) return null;
@@ -186,6 +210,58 @@ public final class ChainAnchor {
         String r = rpc("eth_sendTransaction", params, 3000);
         if (r == null || !r.startsWith("0x") || r.startsWith("ERROR")) return null;
         return r;
+    }
+
+    /** EIP-155 chainId for signing: baseline pin wins over config/chain.json. */
+    private long signChainId() {
+        if (pinnedChainId != null && !pinnedChainId.isEmpty()) {
+            try {
+                return Long.parseLong(pinnedChainId.startsWith("0x") ? pinnedChainId.substring(2) : pinnedChainId,
+                        pinnedChainId.startsWith("0x") ? 16 : 10);
+            } catch (Exception ignored) { /* fall through to config */ }
+        }
+        return chainIdCfg;
+    }
+
+    /** Local sign: nonce + gasPrice from the node, secp256k1 EIP-155, eth_sendRawTransaction.
+     *  One immediate retry covers a lost/slow response: each attempt fetches the current
+     *  pending nonce, so a tx that already landed gets a higher nonce (duplicate-seq txs
+     *  revert on prevHash break, chain state stays correct), a never-arrived tx is resent. */
+    private String sendRawTx(String data) {
+        try {
+            String fromAddr = Secp256k1.addressHex(rawKey);
+            String r = rawAttempt(fromAddr, data);
+            if (r == null) {
+                Thread.sleep(250);
+                r = rawAttempt(fromAddr, data);
+            }
+            return r;
+        } catch (Exception e) {
+            System.out.println("RAW_TX_ERR " + e);
+            return null;
+        }
+    }
+
+    private String rawAttempt(String fromAddr, String data) {
+        try {
+            String nonceHex = rpc("eth_getTransactionCount", "[\"" + fromAddr + "\",\"pending\"]", 2000);
+            String gasHex = rpc("eth_gasPrice", "[]", 2000);
+            long chainId = signChainId();
+            if (nonceHex == null || !nonceHex.startsWith("0x")) return null;
+            if (gasHex == null || !gasHex.startsWith("0x")) return null;
+            if (chainId <= 0) return null;
+            long nonce = Long.parseLong(nonceHex.substring(2), 16);
+            long gasPrice = Long.parseLong(gasHex.substring(2), 16);
+            byte[] to = Secp256k1.unhex(contractAddr);
+            byte[] payload = Secp256k1.unhex(data);
+            byte[] unsigned = Rlp.unsignedLegacy(nonce, gasPrice, gas, to, 0, payload, chainId);
+            byte[] z = Keccak.keccak256(unsigned);
+            Secp256k1.Sig sig = Secp256k1.sign(rawKey, z, chainId);
+            byte[] tx = Rlp.signedLegacy(nonce, gasPrice, gas, to, 0, payload, sig.v(), sig.r(), sig.s());
+            String r = rpc("eth_sendRawTransaction", "[\"0x" + Abi.hex(tx) + "\"]", 3000);
+            if (r == null || !r.startsWith("0x") || r.startsWith("ERROR")) return null;
+            return r;
+        } catch (Exception e) { return null; }
     }
 
     /** Wait for automined receipt; returns "0x1", "0x0", or null (still pending).
