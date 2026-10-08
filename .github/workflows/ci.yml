@@ -28,7 +28,22 @@ jobs:
         run: javac --release 17 -d out17 $(find java/src -name "*.java")
 
       - name: "SelfTest (73 checks - attack table, crypto, Merkle, ABI, key pin, witness, receipt, cursor, chain readback, chain pin)"
-        run: java -cp out integrity.test.SelfTest
+        run: |
+          set -euo pipefail
+          java -cp out integrity.test.SelfTest | tee selftest.out
+          n=$(grep -oE '\([0-9]+ checks\)' selftest.out | grep -oE '[0-9]+')
+          echo "reported checks: $n"
+          grep -q "Tests-${n}_checks" README.md || { echo "README badge says something other than ${n} checks"; exit 1; }
+          grep -q "SelfTest - ${n} checks" README.md || { echo "README SelfTest heading mismatch (${n})"; exit 1; }
+          grep -q "SelfTest (${n} checks" .github/workflows/ci.yml || { echo "ci.yml step name mismatch (${n})"; exit 1; }
+          echo "counts consistent"
+
+      - name: Docs hygiene - no em-dashes, no competition framing
+        run: |
+          set -e
+          if git grep -I -n '—' -- .; then echo "em-dash found in tracked files"; exit 1; fi
+          if git grep -I -n -i -E 'technorazz|hackathon|track 1\.6|judges?|prize|bounty' -- .; then echo "competition framing found in tracked files"; exit 1; fi
+          echo "hygiene clean"
 
       - name: Dashboard JS syntax
         run: node --check web/app.js
