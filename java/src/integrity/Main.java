@@ -101,8 +101,10 @@ public final class Main {
         final long[] seqBox = {seq};
         final boolean chainPinned = !baseline.chainContract().isEmpty();
         final String[] readbackBox = {"off"};
+        final integrity.batch.BatchCollector batch = new integrity.batch.BatchCollector();
+        final String[] batchRootBox = {"-"};
         final Dashboard.Status[] last = {new Dashboard.Status("STARTING", seq, "-", "BOOT",
-                baseline.hComb(), "-", "-", "-", "-", "boot", 0, 0, 0, false, chainPinned, "off")};
+                baseline.hComb(), "-", "-", "-", "-", "boot", 0, 0, 0, false, chainPinned, "off", "-")};
         Thread watchdog = new Thread(() -> {
             while (true) {
                 try {
@@ -111,7 +113,7 @@ public final class Main {
                     if (verifier.isStale(now) && !"STALE".equals(last[0].state())) {
                         Dashboard.Status st = new Dashboard.Status("STALE", seqBox[0], "-", "STALE",
                                 baseline.hComb(), "-", verifier.headHash(), verifier.headHash(),
-                                "-", "STALE: no fresh anchor for >" + STALE_SEC + "s (checker killed?) head=" + verifier.headHash(), cycle[0], 0, 0, false, chainPinned, readbackBox[0]);
+                                "-", "STALE: no fresh anchor for >" + STALE_SEC + "s (checker killed?) head=" + verifier.headHash(), cycle[0], 0, 0, false, chainPinned, readbackBox[0], batchRootBox[0]);
                         last[0] = st;
                         dash.update(st);
                         System.out.println("WATCHDOG STALE head=" + verifier.headHash());
@@ -159,9 +161,23 @@ public final class Main {
                         + " | witness=" + (witOk ? "ok" : "OFF")
                         + " " + readback
                         + " chainUp=" + receipt.fromChain() + (receipt.fromChain() ? " chainTs=" + effectiveTs : "");
+                // Live Merkle batch window (docs/SCALING.md): every 12 successful
+                // heartbeats -> one root + proofs, reported off-chain in status/detail.
+                batch.add(agentId, m.hComb());
+                if (batch.size() >= 12) {
+                    long b0 = System.nanoTime();
+                    String broot = batch.root();
+                    int bproofs = batch.proofs().size();
+                    long bUs = (System.nanoTime() - b0) / 1_000;
+                    batch.clear();
+                    batchRootBox[0] = broot;
+                    detail += " | batch window=12 root=" + broot.substring(0, 8)
+                            + " proofs=" + bproofs + " build=" + bUs + "us";
+                    System.out.println("BATCH window=12 root=" + broot + " buildUs=" + bUs);
+                }
                 Dashboard.Status st = new Dashboard.Status(state, seq, component, v.reason().name(),
                         baseline.hComb(), re.hComb(),
-                        m.hComb(), prevHash, receipt.ledgerRef(), detail, cycle[0], measureMs, verifyMs, receipt.fromChain(), chainPinned, rb);
+                        m.hComb(), prevHash, receipt.ledgerRef(), detail, cycle[0], measureMs, verifyMs, receipt.fromChain(), chainPinned, rb, batchRootBox[0]);
                 last[0] = st;
                 dash.update(st);
                 System.out.println("cycle=" + cycle[0] + " seq=" + seq + " " + state + " " + v.reason()
@@ -181,12 +197,12 @@ public final class Main {
                     st = new Dashboard.Status("STALE", seq, "-", "STALE",
                             baseline.hComb(), "-", verifier.headHash(), verifier.headHash(), "-",
                             "STALE: heartbeat stalled >" + STALE_SEC + "s (cause: " + t + ") head=" + verifier.headHash(),
-                            cycle[0], 0, 0, false, chainPinned, readbackBox[0]);
+                            cycle[0], 0, 0, false, chainPinned, readbackBox[0], batchRootBox[0]);
                     System.out.println("WATCHDOG STALE (stalled loop) head=" + verifier.headHash());
                 } else {
                     st = new Dashboard.Status("RED", seq, "-", "CYCLE_ERR",
                             baseline.hComb(), "ERR", prevHash, prevHash, "-",
-                            "CYCLE_ERR: " + t + " (missing file counts as tamper)", cycle[0], 0, 0, false, chainPinned, readbackBox[0]);
+                            "CYCLE_ERR: " + t + " (missing file counts as tamper)", cycle[0], 0, 0, false, chainPinned, readbackBox[0], batchRootBox[0]);
                 }
                 last[0] = st;
                 dash.update(st);

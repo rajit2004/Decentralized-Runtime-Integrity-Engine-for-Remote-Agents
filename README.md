@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-for-Remote-Agents/actions/workflows/ci.yml"><img src="https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-for-Remote-Agents/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-for-Remote-Agents/wiki"><img src="https://img.shields.io/badge/wiki-pages-blue?style=flat-square" alt="Wiki" /></a>
-  <a href="#testing--ci"><img src="https://img.shields.io/badge/Tests-74_checks-AB47BC?style=flat-square" alt="Tests" /></a>
+  <a href="#testing--ci"><img src="https://img.shields.io/badge/Tests-75_checks-AB47BC?style=flat-square" alt="Tests" /></a>
   <img src="https://img.shields.io/badge/track-1.6_Cybersecurity-blue.svg?style=flat-square" alt="Track" />
   <img src="https://img.shields.io/badge/made_with-Java_17+-red?logo=openjdk&style=flat-square" alt="Java" />
   <img src="https://img.shields.io/badge/chain-Hardhat_local_node-yellow?logo=ethereum&style=flat-square" alt="Chain" />
@@ -174,7 +174,7 @@ stateDiagram-v2
 * **Live Tamper Detection** - config edit flips `POLICY_CFG_CHANGED` next cycle; the memory endpoint flips `POLICY_MEM_CHANGED` with no file edit; restore returns GREEN with no restart. Easiest path: the dashboard's Tamper/Restore buttons.
 * **Stale / Replay Guard** - rejects timestamps older than 12s (chain `block.timestamp` when up) and reused/rewound `seq`; `seq` persisted in `config/seq.dat` so restarts don't self-flag. A stalled heartbeat shows `CYCLE_ERR` with the cause first, then `STALE` after 12s (watchdog wins, no flicker).
 * **Zero External Java Deps** - pure JDK 17+ (tested on 24). `javac` + `java` is enough: no Maven, Gradle, Spring, or web3j download. Build and run fully offline.
-* **Scale: Merkle Batching** - collect a window of `hComb`, anchor one root/min, keep per-device proofs. 10k-leaf root in ~93ms. See `docs/SCALING.md`.
+* **Scale: Merkle Batching** - collect a window of `hComb`, anchor one root/min, keep per-device proofs. The engine runs a live 12-cycle window (`batchRoot` in `/api/status`, root attested off-chain until contract v2). 10k-leaf root in ~93ms. See `docs/SCALING.md`.
 * **Measured Performance** - 20 trials: pipeline avg 4ms (measure 0.6, sign 1.6, verify 2.0), worst 24ms. Detection = next 5s interval + pipeline. See `docs/BENCHMARKS.md`.
 
 ---
@@ -194,7 +194,7 @@ stateDiagram-v2
 | **Batch** | `batch/MerkleTree` root/min + proofs (10k scale) |
 | **Fallback Ledger** | `ledger.jsonl` tamper-evident fallback (headHash in memory), chain event log authoritative |
 | **Timing** | 5s interval, STALE after 12s, 1s watchdog; pipeline avg 4ms worst 24ms |
-| **CI** | GitHub Actions: compile, `--release 17`, 74-check SelfTest, LF gate, live smoke test, contract build, chain e2e (deploy + pin + readback + tamper + pin refusal) |
+| **CI** | GitHub Actions: compile, `--release 17`, 75-check SelfTest, LF gate, live smoke test, contract build, chain e2e (deploy + pin + readback + tamper + pin refusal) |
 
 ---
 
@@ -202,31 +202,31 @@ stateDiagram-v2
 
 ```text
 1.6/
-â”œâ”€â”€ .github/workflows/ci.yml    # gates every push/PR (see Testing & CI)
-â”œâ”€â”€ contract/
-â”‚   â”œâ”€â”€ contracts/Integrity.sol # diary: enroll() + anchor() + events
-â”‚   â”œâ”€â”€ hardhat.config.js
-â”‚   â”œâ”€â”€ package.json
-â”‚   â””â”€â”€ scripts/deploy.js       # npm run deploy -> writes config/chain.json
-â”œâ”€â”€ java/src/integrity/         # 19 Java files, one job each
-â”‚   â”œâ”€â”€ Main.java               # heartbeat loop + wiring + watchdog
-â”‚   â”œâ”€â”€ measure/                # SHA-256 triple fingerprint + wire JSON
-â”‚   â”œâ”€â”€ sign/                   # Ed25519 seal, keys/ load-or-generate
-â”‚   â”œâ”€â”€ enroll/                 # Phase 0 golden capture + persisted seq
-â”‚   â”œâ”€â”€ chain/                  # real anchor() txs, Keccak, manual ABI
-â”‚   â”œâ”€â”€ verify/Verifier.java    # 6-check verifier + key pin
-â”‚   â”œâ”€â”€ witness/Witness.java    # boss counter-attestation, hash-chained
-â”‚   â”œâ”€â”€ batch/                  # MerkleTree + fleet benchmarks
-â”‚   â”œâ”€â”€ agent/AgentState.java   # dummy worker whitelisted state
-â”‚   â”œâ”€â”€ ui/Dashboard.java       # GREEN/RED page + API :8080
-â”‚   â””â”€â”€ test/SelfTest.java      # 74-check regression suite
-â”œâ”€â”€ config/
-â”‚   â”œâ”€â”€ agent-config.json       # tamper target (edit live)
-â”‚   â””â”€â”€ baseline.json           # golden baseline, Boss trusted store
-â”œâ”€â”€ web/                        # dashboard UI (app.js / index.html / styles.css)
-â”œâ”€â”€ scripts/                    # run.ps1, demo-tamper.ps1, demo-stale.ps1, redeploy.ps1
-â”œâ”€â”€ docs/                       # BENCHMARKS, THREAT_MODEL, SCALING, ...
-â””â”€â”€ README.md
+Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ .github/workflows/ci.yml    # gates every push/PR (see Testing & CI)
+Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ contract/
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ contracts/Integrity.sol # diary: enroll() + anchor() + events
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ hardhat.config.js
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ package.json
+Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ scripts/deploy.js       # npm run deploy -> writes config/chain.json
+Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ java/src/integrity/         # 19 Java files, one job each
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ Main.java               # heartbeat loop + wiring + watchdog
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ measure/                # SHA-256 triple fingerprint + wire JSON
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ sign/                   # Ed25519 seal, keys/ load-or-generate
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ enroll/                 # Phase 0 golden capture + persisted seq
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ chain/                  # real anchor() txs, Keccak, manual ABI
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ verify/Verifier.java    # 6-check verifier + key pin
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ witness/Witness.java    # boss counter-attestation, hash-chained
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ batch/                  # MerkleTree + fleet benchmarks
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ agent/AgentState.java   # dummy worker whitelisted state
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ ui/Dashboard.java       # GREEN/RED page + API :8080
+Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ test/SelfTest.java      # 75-check regression suite
+Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ config/
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ agent-config.json       # tamper target (edit live)
+Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ baseline.json           # golden baseline, Boss trusted store
+Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ web/                        # dashboard UI (app.js / index.html / styles.css)
+Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ scripts/                    # run.ps1, demo-tamper.ps1, demo-stale.ps1, redeploy.ps1
+Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ docs/                       # BENCHMARKS, THREAT_MODEL, SCALING, ...
+Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ README.md
 ```
 
 ---
@@ -287,7 +287,7 @@ Never auto-overwrite the baseline from chain. Running `Enroller` also pins the c
 
 ## Testing & CI
 
-### SelfTest - 74 checks, pure JDK, exit 1 on failure
+### SelfTest - 75 checks, pure JDK, exit 1 on failure
 
 ```powershell
 javac -d out (Get-ChildItem -Recurse java/src/*.java)
@@ -319,7 +319,7 @@ Covers:
 |---|---|
 | `javac` full build | compile breakage |
 | `javac --release 17` | accidental Java 18+ APIs |
-| `SelfTest` (74 checks) | verifier/crypto/chain regressions |
+| `SelfTest` (75 checks) | verifier/crypto/chain regressions |
 | `node --check web/app.js` | dashboard JS syntax |
 | `git ls-files --eol` on the 2 hashed files | LF/CRLF baseline portability break |
 | Live smoke: boot -> must reach GREEN | fresh-clone boot regression |

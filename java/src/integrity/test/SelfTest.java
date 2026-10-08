@@ -409,12 +409,13 @@ public final class SelfTest {
         System.out.println("[dashboard]");
         var d = new integrity.ui.Dashboard();
         var st = new integrity.ui.Dashboard.Status("GREEN", 7, "-", "OK",
-                h64(1), h64(2), h64(3), h64(4), "tx", "detail", 1, 2, 3, true, true, "ok");
+                h64(1), h64(2), h64(3), h64(4), "tx", "detail", 1, 2, 3, true, true, "ok", h64(9));
         check("status carries witness=null when unset", d.statusJson(st).contains("\"witness\":null"));
         d.setWitness(new integrity.ui.Dashboard.WitnessInfo(true, true, 3, h64(5), 42, "OK"));
         String j = d.statusJson(st);
         check("status exposes chainPinned + lastReadback",
                 j.contains("\"chainPinned\":true") && j.contains("\"lastReadback\":\"ok\""));
+        check("status exposes batchRoot", j.contains("\"batchRoot\":\"" + h64(9) + "\""));
         check("witness object exposes chainOk/lines/lastSeq",
                 j.contains("\"witness\":{\"enabled\":true,\"chainOk\":true,\"lines\":3")
                         && j.contains("\"lastSeq\":42") && j.contains("\"lastVerdict\":\"OK\""));

@@ -23,7 +23,7 @@ public final class Dashboard {
                          String expected, String observed, String chain, String prevHash,
                          String tx, String detail, long cycle,
                          long measureMs, long verifyMs, boolean chainUp,
-                         boolean chainPinned, String lastReadback) {}
+                         boolean chainPinned, String lastReadback, String batchRoot) {}
 
     /** Witness panel data: boss counter-attestation status, refreshed each cycle. */
     public record WitnessInfo(boolean enabled, boolean chainOk, long lines, String head,
@@ -34,7 +34,7 @@ public final class Dashboard {
     public void setWitness(WitnessInfo w) { this.wit = w; }
 
     private final AtomicReference<Status> cur = new AtomicReference<>(
-            new Status("STARTING", 0, "-", "-", "-", "-", "-", "-", "-", "boot", 0, 0, 0, false, false, "off"));
+            new Status("STARTING", 0, "-", "-", "-", "-", "-", "-", "-", "boot", 0, 0, 0, false, false, "off", "-"));
     private final Deque<Status> history = new ArrayDeque<>();
     private final Path webDir = Paths.get("web");
 
@@ -117,6 +117,7 @@ public final class Dashboard {
                 + ",\"measureMs\":" + s.measureMs() + ",\"verifyMs\":" + s.verifyMs()
                 + ",\"chainUp\":" + s.chainUp() + ",\"chainPinned\":" + s.chainPinned()
                 + ",\"lastReadback\":\"" + s.lastReadback() + "\""
+                + ",\"batchRoot\":\"" + s.batchRoot() + "\""
                 + ",\"witness\":" + witnessJson(wit)
                 + ",\"now\":" + (System.currentTimeMillis() / 1000) + "}";
     }
