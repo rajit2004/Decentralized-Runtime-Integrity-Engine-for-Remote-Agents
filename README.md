@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-for-Remote-Agents/actions/workflows/ci.yml"><img src="https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-for-Remote-Agents/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/rajit2004/Decentralized-Runtime-Integrity-Engine-for-Remote-Agents/wiki"><img src="https://img.shields.io/badge/wiki-pages-blue?style=flat-square" alt="Wiki" /></a>
-  <a href="#testing--ci"><img src="https://img.shields.io/badge/Tests-76_checks-AB47BC?style=flat-square" alt="Tests" /></a>
+  <a href="#testing--ci"><img src="https://img.shields.io/badge/Tests-78_checks-AB47BC?style=flat-square" alt="Tests" /></a>
   <img src="https://img.shields.io/badge/track-1.6_Cybersecurity-blue.svg?style=flat-square" alt="Track" />
   <img src="https://img.shields.io/badge/made_with-Java_17+-red?logo=openjdk&style=flat-square" alt="Java" />
   <img src="https://img.shields.io/badge/chain-Hardhat_local_node-yellow?logo=ethereum&style=flat-square" alt="Chain" />
@@ -194,7 +194,7 @@ stateDiagram-v2
 | **Batch** | `batch/MerkleTree` root/min + proofs (10k scale) |
 | **Fallback Ledger** | `ledger.jsonl` tamper-evident fallback (headHash in memory), chain event log authoritative |
 | **Timing** | 5s interval, STALE after 12s, 1s watchdog; pipeline avg 4ms worst 24ms |
-| **CI** | GitHub Actions: compile, `--release 17`, 76-check SelfTest, LF gate, live smoke test, contract build, chain e2e (deploy + pin + readback + tamper + pin refusal) |
+| **CI** | GitHub Actions: compile, `--release 17`, 78-check SelfTest, LF gate, live smoke test, contract build, chain e2e (deploy + pin + readback + tamper + pin refusal) |
 
 ---
 
@@ -219,7 +219,7 @@ stateDiagram-v2
 │   ├── batch/                  # MerkleTree + fleet benchmarks
 │   ├── agent/AgentState.java   # dummy worker whitelisted state
 │   ├── ui/Dashboard.java       # GREEN/RED page + API :8080
-│   └── test/SelfTest.java      # 76-check regression suite
+│   └── test/SelfTest.java      # 78-check regression suite
 ├── config/
 │   ├── agent-config.json       # tamper target (edit live)
 │   └── baseline.json           # golden baseline, Boss trusted store
@@ -252,6 +252,8 @@ java -cp out integrity.Main
 ```
 
 Open <http://localhost:8080> - you should see GREEN flowing with cycle + tx.
+
+Optional env overrides: `PORT=9090` (dashboard bind port, default 8080) and `RPC_URL=http://host:8545` (chain RPC; precedence `RPC_URL` > `config/chain.json` > `http://127.0.0.1:8545`).
 
 ### 3. Optional: real chain anchoring (recommended)
 
@@ -287,7 +289,7 @@ Never auto-overwrite the baseline from chain. Running `Enroller` also pins the c
 
 ## Testing & CI
 
-### SelfTest - 76 checks, pure JDK, exit 1 on failure
+### SelfTest - 78 checks, pure JDK, exit 1 on failure
 
 ```powershell
 javac -d out (Get-ChildItem -Recurse java/src/*.java)
@@ -319,7 +321,7 @@ Covers:
 |---|---|
 | `javac` full build | compile breakage |
 | `javac --release 17` | accidental Java 18+ APIs |
-| `SelfTest` (76 checks) | verifier/crypto/chain regressions |
+| `SelfTest` (78 checks) | verifier/crypto/chain regressions |
 | `node --check web/app.js` | dashboard JS syntax |
 | `git ls-files --eol` on the 2 hashed files | LF/CRLF baseline portability break |
 | Live smoke: boot -> must reach GREEN | fresh-clone boot regression |

@@ -32,6 +32,12 @@ public final class Dashboard {
 
     private volatile WitnessInfo wit = null;
 
+    /** PORT env parsing: null/blank/garbage falls back to the default port. */
+    public static int parsePort(String v, int def) {
+        try { return v == null || v.isBlank() ? def : Integer.parseInt(v.trim()); }
+        catch (NumberFormatException e) { return def; }
+    }
+
     public void setWitness(WitnessInfo w) { this.wit = w; }
 
     private final AtomicReference<Status> cur = new AtomicReference<>(

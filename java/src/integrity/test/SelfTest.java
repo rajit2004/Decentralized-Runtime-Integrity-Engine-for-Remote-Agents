@@ -339,6 +339,11 @@ public final class SelfTest {
         check("baseline parses contract + chainId pins",
                 b.chainContract().equals("0x5FbDB2315678afecb367f032d93F642f64180aa3") && b.chainId().equals("0x7a69"));
         Files.deleteIfExists(tmp);
+
+        check("RPC precedence env > chain.json > default",
+                "http://env".equals(ChainAnchor.pickRpc("http://env", "http://json", "http://def"))
+                        && "http://json".equals(ChainAnchor.pickRpc(null, "http://json", "http://def"))
+                        && "http://def".equals(ChainAnchor.pickRpc(" ", "", "http://def")));
     }
 
     // ---- key pinning: a swapped key pair must not self-verify into GREEN ----
@@ -421,6 +426,10 @@ public final class SelfTest {
                 m.contains("integrity_state{state=\"GREEN\"} 1")
                         && m.contains("integrity_seq 7")
                         && m.contains("integrity_batch_root{root=\"" + h64(9) + "\"} 1"));
+        check("PORT parse: default, valid, garbage",
+                integrity.ui.Dashboard.parsePort(null, 8080) == 8080
+                        && integrity.ui.Dashboard.parsePort(" 9090 ", 8080) == 9090
+                        && integrity.ui.Dashboard.parsePort("abc", 8080) == 8080);
         check("witness object exposes chainOk/lines/lastSeq",
                 j.contains("\"witness\":{\"enabled\":true,\"chainOk\":true,\"lines\":3")
                         && j.contains("\"lastSeq\":42") && j.contains("\"lastVerdict\":\"OK\""));

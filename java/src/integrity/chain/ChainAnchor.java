@@ -63,28 +63,35 @@ public final class ChainAnchor {
 
     public record AnchorReceipt(String ledgerRef, boolean fromChain, long chainTs, Abi.ChainRecord chainRec) {}
 
+    /** RPC precedence: RPC_URL env > config/chain.json rpcUrl > constructor default. */
+    public static String pickRpc(String env, String chainJsonVal, String def) {
+        if (env != null && !env.isBlank()) return env.trim();
+        if (chainJsonVal != null && !chainJsonVal.isBlank()) return chainJsonVal;
+        return def;
+    }
+
     /** config/chain.json: {"rpcUrl":"...","contractAddr":"0x..","from":"0x..","gas":"0x.."} (optional). */
     private void loadConfig() {
+        String jsonRpc = "";
         try {
-            if (!Files.exists(cfgPath)) return;
-            String j = Files.readString(cfgPath);
-            if (j.contains("\"rpcUrl\"")) {
-                String rpc = Verifier.get(j, "rpcUrl");
-                if (!rpc.isBlank()) this.rpcUrl = rpc;
-            }
-            if (j.contains("\"contractAddr\"")) {
-                String addr = Verifier.get(j, "contractAddr");
-                if (!addr.isBlank()) this.contractAddr = addr;
-            }
-            if (j.contains("\"from\"")) {
-                String f = Verifier.get(j, "from");
-                if (!f.isBlank()) this.from = f;
-            }
-            if (j.contains("\"gas\"")) {
-                String g = Verifier.get(j, "gas");
-                if (!g.isBlank()) this.gas = Long.parseLong(g.startsWith("0x") ? g.substring(2) : g, g.startsWith("0x") ? 16 : 10);
+            if (Files.exists(cfgPath)) {
+                String j = Files.readString(cfgPath);
+                if (j.contains("\"rpcUrl\"")) jsonRpc = Verifier.get(j, "rpcUrl");
+                if (j.contains("\"contractAddr\"")) {
+                    String addr = Verifier.get(j, "contractAddr");
+                    if (!addr.isBlank()) this.contractAddr = addr;
+                }
+                if (j.contains("\"from\"")) {
+                    String f = Verifier.get(j, "from");
+                    if (!f.isBlank()) this.from = f;
+                }
+                if (j.contains("\"gas\"")) {
+                    String g = Verifier.get(j, "gas");
+                    if (!g.isBlank()) this.gas = Long.parseLong(g.startsWith("0x") ? g.substring(2) : g, g.startsWith("0x") ? 16 : 10);
+                }
             }
         } catch (Exception ignored) { /* probe-only mode */ }
+        this.rpcUrl = pickRpc(System.getenv("RPC_URL"), jsonRpc, defaultRpc);
     }
 
     public boolean configured() { return contractAddr != null; }

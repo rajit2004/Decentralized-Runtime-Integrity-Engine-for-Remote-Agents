@@ -63,7 +63,7 @@ public final class Main {
         dash.setWitness(new Dashboard.WitnessInfo(true, witChainOk[0], witness.lineCount(), witness.head(), 0, "-"));
         System.out.println("WITNESS chain=" + (witChainOk[0] ? "verified" : "BROKEN") + " entries=" + witness.lineCount()
                 + (witChainOk[0] ? "" : " - audit trail failed verification"));
-        HttpServer http = dash.start(8080);
+        HttpServer http = dash.start(Dashboard.parsePort(System.getenv("PORT"), 8080));
 
         // Item 13 demo endpoint: simulated memory attack without file edit.
         http.createContext("/tamper/memory", ex -> {
