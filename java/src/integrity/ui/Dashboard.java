@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * embedded page if missing), plus JSON APIs polled by the frontend:
  *   GET /api/status  -> latest Status as JSON
  *   GET /api/history -> last 60 cycles as JSON array
+ *   GET /metrics     -> Prometheus text exposition (localhost-only)
  *   GET /api/tamper/config   -> flip threshold 100->999 (demo attack)
  *   GET /api/restore/config  -> restore threshold (re-enroll if source/config bytes changed)
  */
@@ -54,6 +55,7 @@ public final class Dashboard {
             else if (path.equals("/styles.css")) serveFile(ex, "styles.css", "text/css", false);
             else if (path.equals("/api/status")) serveJson(ex, statusJson(cur.get()));
             else if (path.equals("/api/history")) serveJson(ex, historyJson());
+            else if (path.equals("/metrics")) serveText(ex, metrics(cur.get()), "text/plain; version=0.0.4; charset=utf-8");
             else if (path.equals("/api/evidence")) serveEvidence(ex);
             else if (path.equals("/api/baseline")) serveBaseline(ex);
             else if (path.equals("/api/tamper/config")) serveJson(ex, tamperConfig());
@@ -82,6 +84,14 @@ public final class Dashboard {
     private void serveJson(HttpExchange ex, String json) throws IOException {
         byte[] b = json.getBytes(StandardCharsets.UTF_8);
         ex.getResponseHeaders().add("Content-Type", "application/json; charset=utf-8");
+        ex.getResponseHeaders().add("Cache-Control", "no-store");
+        ex.sendResponseHeaders(200, b.length);
+        try (OutputStream o = ex.getResponseBody()) { o.write(b); }
+    }
+
+    private void serveText(HttpExchange ex, String body, String type) throws IOException {
+        byte[] b = body.getBytes(StandardCharsets.UTF_8);
+        ex.getResponseHeaders().add("Content-Type", type);
         ex.getResponseHeaders().add("Cache-Control", "no-store");
         ex.sendResponseHeaders(200, b.length);
         try (OutputStream o = ex.getResponseBody()) { o.write(b); }
@@ -120,6 +130,43 @@ public final class Dashboard {
                 + ",\"batchRoot\":\"" + s.batchRoot() + "\""
                 + ",\"witness\":" + witnessJson(wit)
                 + ",\"now\":" + (System.currentTimeMillis() / 1000) + "}";
+    }
+
+    /** Prometheus text exposition of a status. Localhost-only (bind is loopback). */
+    public String metrics(Status s) {
+        StringBuilder b = new StringBuilder(512);
+        head(b, "integrity_state", "Current verdict as a labeled gauge (1 = active state).", "gauge");
+        for (String cand : new String[]{"GREEN", "RED", "STALE", "STARTING"})
+            b.append("integrity_state{state=\"").append(cand).append("\"} ")
+             .append(cand.equals(s.state()) ? 1 : 0).append('\n');
+        head(b, "integrity_seq", "Signed measurement sequence number.", "gauge");
+        b.append("integrity_seq ").append(s.seq()).append('\n');
+        head(b, "integrity_cycle", "Heartbeat cycle counter since process start.", "counter");
+        b.append("integrity_cycle ").append(s.cycle()).append('\n');
+        head(b, "integrity_measure_ms", "Last measure+sign duration in milliseconds.", "gauge");
+        b.append("integrity_measure_ms ").append(s.measureMs()).append('\n');
+        head(b, "integrity_verify_ms", "Last anchor+verify duration in milliseconds.", "gauge");
+        b.append("integrity_verify_ms ").append(s.verifyMs()).append('\n');
+        head(b, "integrity_chain_up", "1 when the last anchor ran against a live RPC.", "gauge");
+        b.append("integrity_chain_up ").append(s.chainUp() ? 1 : 0).append('\n');
+        head(b, "integrity_chain_pinned", "1 when the baseline pins contract + chainId.", "gauge");
+        b.append("integrity_chain_pinned ").append(s.chainPinned() ? 1 : 0).append('\n');
+        head(b, "integrity_readback", "Last on-chain record readback as a labeled gauge.", "gauge");
+        for (String cand : new String[]{"ok", "miss", "off"})
+            b.append("integrity_readback{result=\"").append(cand).append("\"} ")
+             .append(cand.equals(s.lastReadback()) ? 1 : 0).append('\n');
+        head(b, "integrity_batch_root", "Last completed 12-cycle Merkle batch window root.", "gauge");
+        b.append("integrity_batch_root{root=\"").append(s.batchRoot()).append("\"} 1\n");
+        head(b, "integrity_witness_lines", "Witness chain file line count.", "gauge");
+        b.append("integrity_witness_lines ").append(wit == null ? 0 : wit.lines()).append('\n');
+        head(b, "integrity_witness_chain_ok", "1 when the witness chain fully re-verified.", "gauge");
+        b.append("integrity_witness_chain_ok ").append(wit != null && wit.chainOk() ? 1 : 0).append('\n');
+        return b.toString();
+    }
+
+    private static void head(StringBuilder b, String name, String help, String type) {
+        b.append("# HELP ").append(name).append(' ').append(help).append('\n')
+         .append("# TYPE ").append(name).append(' ').append(type).append('\n');
     }
 
     /** One-file evidence bundle for the demo: current status + baseline + signed witness chain. */

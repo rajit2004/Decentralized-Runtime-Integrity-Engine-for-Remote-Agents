@@ -416,6 +416,11 @@ public final class SelfTest {
         check("status exposes chainPinned + lastReadback",
                 j.contains("\"chainPinned\":true") && j.contains("\"lastReadback\":\"ok\""));
         check("status exposes batchRoot", j.contains("\"batchRoot\":\"" + h64(9) + "\""));
+        String m = d.metrics(st);
+        check("metrics exposes state + seq + batchRoot",
+                m.contains("integrity_state{state=\"GREEN\"} 1")
+                        && m.contains("integrity_seq 7")
+                        && m.contains("integrity_batch_root{root=\"" + h64(9) + "\"} 1"));
         check("witness object exposes chainOk/lines/lastSeq",
                 j.contains("\"witness\":{\"enabled\":true,\"chainOk\":true,\"lines\":3")
                         && j.contains("\"lastSeq\":42") && j.contains("\"lastVerdict\":\"OK\""));
