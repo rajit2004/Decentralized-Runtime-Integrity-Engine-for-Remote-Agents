@@ -36,6 +36,7 @@
 * [Verdict Codes](#verdict-codes)
 * [Open Limits](#open-limits)
 * [Contributing](#contributing)
+* [Security](#security)
 * [Author](#author)
 
 ---
@@ -395,6 +396,14 @@ git checkout -b feat/amazing-check
 git commit -m "feat(verify): explain policy mismatch better"
 git push origin feat/amazing-check
 ```
+
+---
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for the reporting process and the security-relevant
+parts of this project (localhost-only binding, key handling, baseline review,
+fail-closed policy). Research project, not audited, not for production use.
 
 ---
 
