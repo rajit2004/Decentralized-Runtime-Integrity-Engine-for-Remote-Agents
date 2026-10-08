@@ -168,13 +168,16 @@ public final class ChainAnchor {
         return r;
     }
 
-    /** Wait briefly for automined receipt; returns "0x1", "0x0", or null (still pending). */
+    /** Wait for automined receipt; returns "0x1", "0x0", or null (still pending).
+     *  Adaptive: fast-first (automined receipts usually land instantly), then back off.
+     *  10 x 50ms + 3 x 200ms ~= 1.1s worst case (was 6 x 200ms = 1.2s with a slow first retry). */
     private String receiptStatus(String txHash) {
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < 13; i++) {
             String body = rpcRawResult("eth_getTransactionReceipt", "[\"" + txHash + "\"]", 2000);
             if (body != null && body.contains("\"status\":\"0x0\"")) return "0x0";
             if (body != null && body.contains("\"status\":\"0x1\"")) return "0x1";
-            try { Thread.sleep(200); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); return null; }
+            try { Thread.sleep(i < 10 ? 50 : 200); }
+            catch (InterruptedException ie) { Thread.currentThread().interrupt(); return null; }
         }
         return null;
     }
